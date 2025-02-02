@@ -328,36 +328,37 @@ async def gif(ctx, *, query):
 
 @bot.command()
 async def ai(ctx, *, user_input: str):
-    # Check if the response is already cached
-    if user_input in response_cache:
-        response = response_cache[user_input]
-    else:
-        try:
-            # Get AI response from the get_ai function
-            response = get_ai(user_input)
-
-            # Cache the response for future use
-            response_cache[user_input] = response
-
-            # Save the updated cache to the file
-            save_cache(response_cache)
-
-        except Exception as e:
-            # Check if it's a rate limit error (Error code: 429)
-            website = os.getenv('Website')
-            if "429" in str(e):
-                await ctx.send(
-                    f"Sorry, we've hit the rate limit for the AI API. To help increase this limit, [Buy us a Coffee!]({website})"
-                )
-                # Log the error for debugging
-                print(f"Rate limit error: {e}")
-            else:
-                # For other errors, simply send an error message
-                await ctx.send(f"An error occurred: {e}")
-                return
-
-    # Send the AI response in the original channel
-    await ctx.send(response)
+    async with ctx.typing():
+        # Check if the response is already cached
+        if user_input in response_cache:
+            response = response_cache[user_input]
+        else:
+            try:
+                # Get AI response from the get_ai function
+                response = get_ai(user_input)
+    
+                # Cache the response for future use
+                response_cache[user_input] = response
+    
+                # Save the updated cache to the file
+                save_cache(response_cache)
+    
+            except Exception as e:
+                # Check if it's a rate limit error (Error code: 429)
+                website = os.getenv('Website')
+                if "429" in str(e):
+                    await ctx.send(
+                        f"Sorry, we've hit the rate limit for the AI API. To help increase this limit, [Buy us a Coffee!]({website})"
+                    )
+                    # Log the error for debugging
+                    print(f"Rate limit error: {e}")
+                else:
+                    # For other errors, simply send an error message
+                    await ctx.send(f"An error occurred: {e}")
+                    return
+    
+        # Send the AI response in the original channel
+        await ctx.send(response)
 
 
 @bot.command()
