@@ -1,4 +1,4 @@
-![Milo Bot Logo](milo-logo.png)
+![Milo Bot Logo](Milo-logo.png)
 # Milo - Super Power Your Server!
 
 Milo is a versatile and interactive Discord bot designed to enhance your server's engagement. Packed with features like AI-powered conversations, fun games, a currency system, and the ability to send postcards, Milo is here to keep your community entertained and active. Whether it’s leveling up, flipping coins, or earning miles, Milo adds an exciting layer to your server!
