@@ -933,6 +933,78 @@ async def daily(ctx):
         f"✈️ {ctx.author.mention}, You earned **500 gems**! Come back in 24 hours for another 500."
     )
 
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def addcommand(ctx, command_name: str, *, response: str):
+    """Adds a custom command to the server."""
+    settings = load_settings()
+    guild_id = str(ctx.guild.id)
+
+    # Ensure the guild has an entry in the settings file
+    if guild_id not in settings:
+        settings[guild_id] = {}
+
+    # Create a "custom_commands" section for this server
+    if "custom_commands" not in settings[guild_id]:
+        settings[guild_id]["custom_commands"] = {}
+
+    # Add the new custom command to the guild's settings
+    settings[guild_id]["custom_commands"][command_name] = response
+
+    # Save the settings back to the file
+    save_settings(settings)
+
+    await ctx.send(f"✅ Custom command `{command_name}` added successfully!")
+
+# Command to remove a custom command
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def removecommand(ctx, command_name: str):
+    """Removes a custom command from the server."""
+    settings = load_settings()
+    guild_id = str(ctx.guild.id)
+
+    if guild_id not in settings or "custom_commands" not in settings[guild_id]:
+        await ctx.send("❌ No custom commands have been set yet.")
+        return
+
+    if command_name in settings[guild_id]["custom_commands"]:
+        del settings[guild_id]["custom_commands"][command_name]
+        save_settings(settings)
+        await ctx.send(f"✅ Custom command `{command_name}` removed successfully!")
+    else:
+        await ctx.send(f"❌ Command `{command_name}` not found.")
+
+# Event to handle custom commands
+@bot.event
+async def on_message(message):
+    # Prevent the bot from responding to itself
+    if message.author == bot.user:
+        return
+
+    # Get the guild settings
+    settings = load_settings()
+    guild_id = str(message.guild.id)
+
+    # Check if custom commands are defined for this guild
+    if guild_id in settings and "custom_commands" in settings[guild_id]:
+        custom_commands = settings[guild_id]["custom_commands"]
+
+        # Check if the message content matches any custom command
+        if message.content in custom_commands:
+            response = custom_commands[message.content]
+
+            # Replace {user.mention} and {user.name} with actual user details
+            response = response.replace("{user.mention}", message.author.mention)
+            response = response.replace("{user.name}", message.author.name)
+
+            await message.channel.send(response)
+            return  # Stop here, don't process other commands after this
+
+    # Process regular commands (this is necessary to allow normal commands to work)
+    await bot.process_commands(message)
+
+    
+
 
 bot.run(os.getenv('DISCORD_TOKEN'))
-
