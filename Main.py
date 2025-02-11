@@ -621,21 +621,26 @@ async def viewsettings(ctx):
 
 @bot.command()
 async def modsetup(ctx):
-    if ctx.author.guild_permissions.manage_channels:
-        # Create a new text channel
-        await ctx.send("Setting up the bot...")
-        await ctx.guild.create_text_channel('path mod logs')
-        await ctx.send(f"✅ Channels have been created.")
-        time.sleep(1)
-        await ctx.send(f"✅ Commands have been setup.")
-        time.sleep(1)
-        await ctx.send(
-            f"✅ Setup Complete. To view a list of commands, run **;helpcommand**"
-        )
+    guild = ctx.guild
+    staff_role = discord.utils.get(guild.roles, name="Staff")
+
+    if staff_role in ctx.author.roles or ctx.author == guild.owner or ctx.author == bot.user:
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(view_channel=False),  # Hide for everyone
+            staff_role: discord.PermissionOverwrite(view_channel=True, read_messages=True, send_messages=True),
+            # Allow staff
+            guild.me: discord.PermissionOverwrite(view_channel=True, read_messages=True, send_messages=True)
+            # Allow Milo bot
+        }
+
+        existing_channel = discord.utils.get(guild.text_channels, name="milo-mod-logs")
+        if existing_channel:
+            await ctx.send("⚠️ 'milo-mod-logs' channel already exists!")
+        else:
+            await guild.create_text_channel('milo-mod-logs', overwrites=overwrites)
+            await ctx.send("✅ Created 'milo-mod-logs' channel with restricted access!")
     else:
-        await ctx.send(
-            "❌ I don't have permission to create a channel. Please make sure I have the necessary permissions, and run this command again."
-        )
+        await ctx.send("❌ You do not have permission to create this channel. To add staff, use the add staff command.")
 
 
 @bot.command()
@@ -1023,6 +1028,118 @@ async def on_message(message):
     await bot.process_commands(message)
 
 
+# Helper function to load data from JSON
+def load_data(file_path):
+    try:
+        with open(file_path, 'r') as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+# Helper function to save data to JSON
+def save_data(file_path, data):
+    with open(file_path, 'w') as f:
+        json.dump(data, f, indent=4)
+
+
+async def send_dm_to_staff(guild, message):
+    log_channel = discord.utils.get(guild.text_channels, name="milo-mod-logs")
+
+    if not log_channel:
+        print("Log channel 'milo-mod-logs' not found!")
+        await message.send("Please use *;modsetup* to correctly setup your server.")
+        return
+
+    await log_channel.send(message)
+
+
+# Load data from files
+reports = load_data("reports_file2")
+warnings = load_data("warnings_file")
+
+
+
+
+
+# **Moderation Commands**
+
+# Kick Command
+@bot.command()
+@commands.has_role("Staff")
+async def kick(ctx, member: discord.Member, *, reason=None):
+    await member.kick(reason=reason)
+    await ctx.send(f'{member} has been kicked from the server.')
+
+    # Send DM to staff
+    dm_message = f"{ctx.author.name} has kicked {member} from the server. Reason: {reason or 'No reason provided.'}"
+    await send_dm_to_staff(ctx, dm_message)
+
+
+# Ban Command
+@bot.command()
+@commands.has_role("Staff")
+async def ban(ctx, member: discord.Member, *, reason=None):
+    await member.ban(reason=reason)
+    await ctx.send(f'{member} has been banned from the server.')
+
+    # Send DM to staff
+    dm_message = f"{ctx.author.name} has banned {member} from the server. Reason: {reason or 'No reason provided.'}"
+    await send_dm_to_staff(ctx, dm_message)
+
+
+# Warn Command
+@bot.command()
+@commands.has_role("Staff")
+async def warn(ctx, member: discord.Member, *, reason):
+    if member.id not in warnings:
+        warnings[member.id] = []
+    warnings[member.id].append(reason)
+    save_data("warnings_file", warnings)
+    await ctx.send(f'{member} has been warned for: {reason}')
+
+    # Send DM to staff
+    dm_message = f"{ctx.author.name} has warned {member} for: {reason} in {ctx.guild.name}"
+    await send_dm_to_staff(ctx.guild, dm_message)
+
+
+# Report Command
+@bot.command()
+async def report(ctx, member: discord.Member, *, report_reason):
+    if not member or not report_reason:
+        await ctx.send("Please provide a user and a reason for the report.")
+        return
+    if member.id not in reports:
+        reports[member.id] = []
+    reports[member.id].append({
+        "reported_by": ctx.author.name,
+        "reason": report_reason
+    })
+    save_data("reports_file", reports)
+    await ctx.send(f'Thank you for your report, {ctx.author}. It has been submitted to the admins.')
+
+    # Send DM to staff
+    dm_message = f"{ctx.author.name} has reported {member} for: {report_reason}"
+    await send_dm_to_staff(ctx, dm_message)
+
+# **Poll Command**
+
+@bot.command()
+@commands.has_role("Staff")
+async def poll(ctx, question, *options):
+    if len(options) < 2:
+        await ctx.send("Please provide at least two options for the poll.")
+        return
+    if len(options) > 10:
+        await ctx.send("Please provide no more than 10 options for the poll.")
+        return
+    embed = discord.Embed(title=question,
+                          description="\n".join([f"{index + 1}. {option}" for index, option in enumerate(options)]),
+                          color=discord.Color.blue())
+    poll_message = await ctx.send(embed=embed)
+
+    for i in range(len(options)):
+        await poll_message.add_reaction(f"{chr(127462 + i)}")  # Adds reactions A, B, C...
 
 
 bot.run(os.getenv('DISCORD_TOKEN'))
