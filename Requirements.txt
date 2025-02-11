@@ -1,0 +1,4 @@
+py-cord
+requests
+openai
+python-dotenv

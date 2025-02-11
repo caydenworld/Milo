@@ -3,11 +3,12 @@ import os
 from discord.ext import commands
 import requests
 import random
-import asyncio
 import json
 import time
 from openai import OpenAI
 from eight_ball_answers import eight_ball_answers
+from dotenv import load_dotenv
+load_dotenv()
 
 # Files for storage
 CACHE_FILE = "ai_cache.json"
@@ -226,14 +227,6 @@ def get_random_gif(search_term: str, apikey: str, ckey: str, limit: int = 8):
     return "No GIFs found or error occurred."
 
 
-# Example usage:
-search_term = "excited"  # You can change this to any search term
-gif_url = get_random_gif(search_term,
-                         apikey="YOUR_API_KEY",
-                         ckey="my_test_app")
-print(gif_url)  # This will print the URL of the GIF to be sent to Discord
-
-
 def get_pixabay_image(query):
     PIXABAY_API_KEY = os.getenv('PIXABAY_API_KEY')
     PIXABAY_URL = "https://pixabay.com/api/"
@@ -303,7 +296,32 @@ def get_cat():
         return response.json()[0]['url']
 
 
+@bot.event
+async def on_guild_join(guild):
+    """Triggered when the bot joins a new guild."""
 
+    # Get the default text channel in the guild
+    channel = next((c for c in guild.text_channels if c.permissions_for(guild.me).send_messages), None)
+
+    if channel:
+        # Create an embed object
+        embed = discord.Embed(
+            title=f"Hello {guild.name}!",
+            description="Thank you for inviting me to your server! I'm **Milo**, your new assistant bot. I'm here to help with moderation, custom commands, and much more! 🎉\n\n"
+            "Here's a few things you can do to get started:\n\n"
+            "- **Set up custom commands** – Need a unique command? I can help with that!\n"
+            "- **Auto Roles** – I can assign roles to new members automatically.\n"
+            "- **Moderation tools** – Let me help you keep the server clean and friendly.\n\n"
+            "I'm excited to be part of your community, and I’m always here to assist! If you need help, just type `!help`, and I'll show you all the awesome things I can do! 🚀",)
+
+        # Add an image to the embed (can be a URL to an image)
+        embed.set_image(url="https://example.com/your-image-url.jpg")  # Replace with your own image URL
+
+        # Send the embed with the image to the channel
+        await channel.send(embed=embed)
+
+    else:
+        print(f"No available channels to send a welcome message in '{guild.name}'!")
 @bot.event
 async def on_member_join(member):
     """Handles new member joins, sends a welcome message in the correct channel, and assigns an auto role."""
@@ -487,7 +505,7 @@ async def ticket(ctx):
         guild.default_role: discord.PermissionOverwrite(read_messages=False),  # Prevent everyone from seeing the ticket
         ctx.author: discord.PermissionOverwrite(read_messages=True),  # Allow the user to see their own ticket
         bot.user: discord.PermissionOverwrite(read_messages=True, send_messages=True)  # Allow bot to see and send messages
-        
+
     }
 
     # Create the ticket channel
@@ -647,13 +665,13 @@ async def ai(ctx, *, user_input: str):
             try:
                 # Get AI response from the get_ai function
                 response = get_ai(user_input)
-    
+
                 # Cache the response for future use
                 response_cache[user_input] = response
-    
+
                 # Save the updated cache to the file
                 save_cache(response_cache)
-    
+
             except Exception as e:
                 # Check if it's a rate limit error (Error code: 429)
                 website = os.getenv('Website')
@@ -667,7 +685,7 @@ async def ai(ctx, *, user_input: str):
                     # For other errors, simply send an error message
                     await ctx.send(f"An error occurred: {e}")
                     return
-    
+
         # Send the AI response in the original channel
         await ctx.send(response)
 
@@ -1004,7 +1022,7 @@ async def on_message(message):
     # Process regular commands (this is necessary to allow normal commands to work)
     await bot.process_commands(message)
 
-    
+
 
 
 bot.run(os.getenv('DISCORD_TOKEN'))
