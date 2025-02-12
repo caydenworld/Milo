@@ -22,7 +22,7 @@ intents.members = True
 
 
 # Initialize bot
-bot = commands.Bot(command_prefix=';', intents=intents)
+bot = commands.Bot(command_prefix=';', intents=intents, help_command=None)
 
 SETTINGS_FILE = "Settings.json"
 
@@ -445,10 +445,11 @@ async def on_command_error(ctx, error):
     elif isinstance(error, commands.CommandNotFound):
         await ctx.send("Command not found. Please check the available commands.")
     else:
-        await ctx.send("An error occurred while processing your request.")
+        await ctx.send(f"An error occurred while processing your request. Error code: {error}")
+        print(f"An error occured in a server {error}")
 
-@bot.command()
-@commands.has_permissions(administrator=True)  # Ensure the person has administrator permissions
+@bot.command(name="addstaff", description="Adds a member to the staff role.", category="Moderation")
+@commands.has_role("Staff")  # Ensure the person has administrator permissions
 async def addstaff(ctx, member: discord.Member):
     """Adds a user to the staff role (only accessible to the server owner or staff)."""
 
@@ -467,7 +468,7 @@ async def addstaff(ctx, member: discord.Member):
         await ctx.send("You need to be the server owner or have the 'Staff' role to use this command.")
 
 
-@bot.command()
+@bot.command(name="closeticket", description="Closes a support ticket.", category="Utilities")
 @commands.has_role("Staff")  # Only staff can close tickets
 async def closeticket(ctx):
     """Closes the ticket by deleting the ticket channel."""
@@ -484,7 +485,7 @@ async def closeticket(ctx):
     else:
         await ctx.send("This command can only be used in a ticket channel.")
 
-@bot.command()
+@bot.command(name="ticket", description="Opens a support ticket.", category="Utilities")
 async def ticket(ctx):
     """Creates a private ticket channel for the user."""
 
@@ -521,8 +522,8 @@ async def ticket(ctx):
     await ctx.send(f"Your ticket has been created! {ticket_channel.mention}")
 
 
-@bot.command()
-@commands.has_permissions(administrator=True)
+@bot.command(name="rr", description="Create a reaction role.", category="Utilities")
+@commands.has_role("Staff")
 async def rr(ctx, message_id: int, emoji: str, *, role: discord.Role):
     """
     Sets up a reaction role for a specific message.
@@ -561,16 +562,16 @@ async def rr(ctx, message_id: int, emoji: str, *, role: discord.Role):
     save_settings(settings)
 
 # Command: Set Auto Role
-@bot.command()
-@commands.has_permissions(administrator=True)
+@bot.command(name="setautorole", description="Sets the auto role for the server.", category="Moderation")
+@commands.has_role("Staff")
 async def setautorole(ctx, role: discord.Role):
     """Sets the Auto Role for new members."""
     update_setting(ctx.guild.id, "Auto Role", role.name)
     await ctx.send(f"✅ Auto Role set to: **{role.name}**")
 
 # Command: Set Welcome Message
-@bot.command()
-@commands.has_permissions(administrator=True)
+@bot.command(name="setwelcome", description="Sets the server´s welcome message.", category="Moderation")
+@commands.has_role("Staff")
 async def setwelcome(ctx, channel: discord.TextChannel = None, *, message: str):
     """Sets a custom welcome message and optionally a specific welcome channel."""
     guild_id = str(ctx.guild.id)
@@ -595,16 +596,16 @@ async def setwelcome(ctx, channel: discord.TextChannel = None, *, message: str):
 
 
 # Command: Set Custom AI Prompt
-@bot.command()
-@commands.has_permissions(administrator=True)
+@bot.command(name="setaiprompt", description="Insert a custom ai prompt.", category="Moderation")
+@commands.has_role("Staff")
 async def setaiprompt(ctx, *, prompt: str):
     """Sets the system prompt for AI interactions."""
     update_setting(ctx.guild.id, "AI Prompt", prompt)
     await ctx.send("✅ AI system prompt updated!")
 
 # Command: View Current Settings
-@bot.command()
-@commands.has_permissions(administrator=True)
+@bot.command(name="viewsettings", description="View the settings for this server.", category="Moderation")
+@commands.has_role("Staff")
 async def viewsettings(ctx):
     """Displays the current server settings."""
     settings = load_settings()
@@ -619,7 +620,7 @@ async def viewsettings(ctx):
     await ctx.send(f"🔧 **Current Settings:**\n{formatted_settings}")
 
 
-@bot.command()
+@bot.command(name="modsetup", description="Sets up the server for Milo.", category="Moderation")
 async def modsetup(ctx):
     guild = ctx.guild
     staff_role = discord.utils.get(guild.roles, name="Staff")
@@ -643,24 +644,24 @@ async def modsetup(ctx):
         await ctx.send("❌ You do not have permission to create this channel. To add staff, use the add staff command.")
 
 
-@bot.command()
+@bot.command(name="riggedcoinflip", description="Win every bet.", category="Utilities")
 async def riggedcoinflip(ctx):
     await ctx.send('Heads')
 
 
-@bot.command()
+@bot.command(name="image", description="Gets an image of choice.", category="Image")
 async def image(ctx, *, query):
     await ctx.send(get_pixabay_image(query))
 
 
-@bot.command()
+@bot.command(name="gif", description="Gets a gif of choice. ", category="Image")
 async def gif(ctx, *, query):
     tenorapikey = os.getenv('TENOR_API')
     clientkey = "The_Path"
     await ctx.send(get_random_gif(query, tenorapikey, clientkey))
 
 
-@bot.command()
+@bot.command(name="ai", description="Talk to Milo!", category="Fun")
 async def ai(ctx, *, user_input: str):
     async with ctx.typing():
         # Check if the response is already cached
@@ -695,12 +696,12 @@ async def ai(ctx, *, user_input: str):
     await ctx.send(response)
 
 
-@bot.command()
+@bot.command(name="magic8ball", description="What will it answer?", category="Fun")
 async def magic8ball(ctx):
     await ctx.send(random.choice(eight_ball_answers))
 
 
-@bot.command()
+@bot.command(name="coinflip", description="Chooses between heads and tails.", category="Utilities")
 async def coinflip(ctx):
     chance = random.randint(1, 2)
     if chance == 1:
@@ -709,7 +710,7 @@ async def coinflip(ctx):
         await ctx.send("Tails")
 
 
-@bot.command()
+@bot.command(name="choice", description="Chooses between yes and no.", category="Utilities")
 async def choice(ctx):
     chance = random.randint(1, 2)
     if chance == 1:
@@ -718,7 +719,7 @@ async def choice(ctx):
         await ctx.send("No")
 
 
-@bot.command()
+@bot.command(name="choice2", description="Chooses between yes, no and maybe.", category="Utilities")
 async def choice2(ctx):
     chance = random.randint(1, 3)
     if chance == 1:
@@ -729,17 +730,17 @@ async def choice2(ctx):
         await ctx.send("Maybe")
 
 
-@bot.command()
+@bot.command(name="magic", description="Summons magical powers.", category="Fun")
 async def magic(ctx):
     await ctx.send("Aberacadabera, You're a Camera!")
 
 
-@bot.command()
+@bot.command(name="cat", description="Gets a random cat.", category="Fun")
 async def cat(ctx):
     await ctx.reply(get_cat())
 
 
-@bot.command()
+@bot.command(name="arebirdsreal", description="Are they?", category="Fun")
 async def arebirdsreal(ctx):
     await ctx.send("No.")
     msg = await bot.wait_for("message")
@@ -747,14 +748,14 @@ async def arebirdsreal(ctx):
         await ctx.send("Yes, of course they're real.")
 
 
-@bot.command()
+@bot.command(name="languages", description="View languages and their language codes for the translate command.", category="Fun")
 async def languages(ctx):
     await ctx.send(
         'Supported languages: Afrikaans (af), Albanian (sq), Amharic (am), Arabic (ar), Armenian (hy), Assamese (as), Aymara (ay), Azerbaijani (az), Bambara (bm), Basque (eu), Belarusian (be), Bengali (bn), Bhojpuri (bho), Bosnian (bs), Bulgarian (bg), Catalan (ca), Cebuano (ceb), Chichewa (ny), Chinese (Simplified) (zh), Chinese (Traditional) (zh-TW), Corsican (co), Croatian (hr), Czech (cs), Danish (da), Dhivehi (dv), Dogri (doi), Dutch (nl), English (en), Esperanto (eo), Estonian (et), Ewe (ee), Filipino (fil), Finnish (fi), French (fr), Frisian (fy), Galician (gl), Georgian (ka), German (de), Greek (el), Guarani (gn), Gujarati (gu), Haitian Creole (ht), Hausa (ha), Hawaiian (haw), Hebrew (he), Hindi (hi), Hmong (hmn), Hungarian (hu), Icelandic (is), Igbo (ig), Ilocano (ilo), Indonesian (id), Irish (ga), Italian (it), Japanese (ja), Javanese (jv), Kannada (kn), Kazakh (kk), Khmer (km), Kinyarwanda (rw), Konkani (gom), Korean (ko), Krio (kri), Kurdish (Kurmanji) (ku), Kurdish (Sorani) (ckb), Kyrgyz (ky), Lao (lo), Latin (la), Latvian (lv), Lingala (ln), Lithuanian (lt), Luganda (lg), Luxembourgish (lb), Macedonian (mk), Maithili (mai), Malagasy (mg), Malay (ms), Malayalam (ml), Maltese (mt), Maori (mi), Marathi (mr), Meiteilon (Manipuri) (mni), Mizo (lus), Mongolian (mn), Myanmar (Burmese) (my), Nepali (ne), Norwegian (no), Odia (Oriya) (or), Oromo (om), Pashto (ps), Persian (fa), Polish (pl), Portuguese (pt), Punjabi (pa), Quechua (qu), Romanian (ro), Russian (ru), Samoan (sm), Sanskrit (sa), Scots Gaelic (gd), Sepedi (nso), Serbian (sr), Sesotho (st), Shona (sn), Sindhi (sd), Sinhala (si), Slovak (sk), Slovenian (sl), Somali (so), Spanish (es), Sundanese (su), Swahili (sw), Swedish (sv), Tajik (tg), Tamil (ta), Tatar (tt), Telugu (te), Thai (th), Tigrinya (ti), Tsonga (ts), Turkish (tr), Turkmen (tk), Twi (tw), Ukrainian (uk), Urdu (ur), Uyghur (ug), Uzbek (uz), Vietnamese (vi), Welsh (cy), Xhosa (xh), Yiddish (yi), Yoruba (yo), Zulu (zu)'
     )
 
 
-@bot.command(name="sendpostcard")
+@bot.command(name="sendpostcard", description="Send a postcard to a user.", category="Fun")
 async def sendpostcard(ctx, recipient: discord.User, *, message=None):
     """
     Sends a postcard to a recipient with a custom message or randomly generated one.
@@ -800,7 +801,7 @@ async def sendpostcard(ctx, recipient: discord.User, *, message=None):
         )
 
 
-@bot.command(name="openpostcard")
+@bot.command(name="openpostcard", description="Open your postcards.", category="Fun")
 async def openpostcard(ctx):
     """
     Allows a recipient to view their postcards.
@@ -826,7 +827,7 @@ async def openpostcard(ctx):
         await ctx.send("❌ You don’t have any postcards to open!")
 
 
-@bot.command()
+@bot.command(name="balance", description="Check your balance.", category="Currency")
 async def balance(ctx):
     guild_id = ctx.guild.id
     user_id = ctx.author.id
@@ -836,7 +837,7 @@ async def balance(ctx):
 
 
 # 💸 Command: Give money to another user
-@bot.command()
+@bot.command(name="give", description="Give another person gems.", category="Currency")
 async def give(ctx, member: discord.Member, amount: int):
     if amount <= 0:
         await ctx.send("Please enter a valid amount.")
@@ -855,7 +856,7 @@ async def give(ctx, member: discord.Member, amount: int):
 
 
 # 🏆 Command: Currency leaderboard (server-specific)
-@bot.command()
+@bot.command(name="gemboard", description="View the leaderboard.", category="Currency")
 async def gemboard(ctx):
     guild_id = str(ctx.guild.id)
     data = load_currency()
@@ -884,7 +885,7 @@ async def gemboard(ctx):
     await ctx.send(leaderboard_message)
 
 
-@bot.command()
+@bot.command(name="level", description="View your level.", category="Leveling")
 async def level(ctx):
     data = read_user_data()
     user_id = str(ctx.author.id)
@@ -914,7 +915,7 @@ async def on_message(message):
         message)  # Allows commands to work even with on_message
 
 
-@bot.command()
+@bot.command(name="daily", description="Get 500 gems every day.", category="Currency")
 async def daily(ctx):
     user_id = str(ctx.author.id)
     guild_id = str(ctx.guild.id)
@@ -953,11 +954,11 @@ async def daily(ctx):
         json.dump(data, f, indent=4)
 
     await ctx.send(
-        f"✈️ {ctx.author.mention}, You earned **500 gems**! Come back in 24 hours for another 500."
+        f"✈️ {ctx.author.mention}, You earned **500 gems** 💎! Come back in 24 hours for another 500."
     )
 
-@bot.command()
-@commands.has_permissions(administrator=True)
+@bot.command(name="addcommand", description="Allows staff to add a custom command.", category="Moderation")
+@commands.has_role("Staff")
 async def addcommand(ctx, command_name: str, *, response: str):
     """Adds a custom command to the server."""
     settings = load_settings()
@@ -980,8 +981,8 @@ async def addcommand(ctx, command_name: str, *, response: str):
     await ctx.send(f"✅ Custom command `{command_name}` added successfully!")
 
 # Command to remove a custom command
-@bot.command()
-@commands.has_permissions(administrator=True)
+@bot.command(name="removecommand", description="Allows staff to remove a custom command.", category="Moderation")
+@commands.has_role("Staff")
 async def removecommand(ctx, command_name: str):
     """Removes a custom command from the server."""
     settings = load_settings()
@@ -1067,7 +1068,7 @@ async def send_dm(user: discord.Member, message: str):
 
 
 
-@bot.command()
+@bot.command(name="kick", description="Allows staff to kick a user.", category="Moderation")
 @commands.has_permissions(kick_members=True)
 async def kick(ctx, member: discord.Member, *, reason="No reason provided"):
     try:
@@ -1086,7 +1087,7 @@ async def kick(ctx, member: discord.Member, *, reason="No reason provided"):
 
 
 # 🔨 **Ban Command**
-@bot.command()
+@bot.command(name="ban", description="Allows staff to ban a user.", category="Moderation")
 @commands.has_permissions(ban_members=True)
 async def ban(ctx, member: discord.Member, *, reason="No reason provided"):
     try:
@@ -1104,7 +1105,7 @@ async def ban(ctx, member: discord.Member, *, reason="No reason provided"):
 
 
 # 🔨 **Report Command**
-@bot.command()
+@bot.command(name="report", description="Reports a user to the staff.", category="Moderation")
 async def report(ctx, member: discord.Member, *, reason="No reason provided"):
     try:
         data = load_data()
@@ -1132,7 +1133,7 @@ async def report(ctx, member: discord.Member, *, reason="No reason provided"):
 
 
 # Warn Command
-@bot.command()
+@bot.command(name="Warn", description="Allows staff to warn a user.", category="Moderation")
 @commands.has_role("Staff")
 async def warn(ctx, member: discord.Member, *, reason):
     if member.id not in warnings:
@@ -1146,7 +1147,7 @@ async def warn(ctx, member: discord.Member, *, reason):
     await send_dm_to_staff(ctx.guild, dm_message)
 # **Poll Command**
 
-@bot.command()
+@bot.command(name="poll", description="Creates a Poll.", category="Moderation")
 @commands.has_role("Staff")
 async def poll(ctx, question, *options):
     if len(options) < 2:
@@ -1164,10 +1165,72 @@ async def poll(ctx, question, *options):
         await poll_message.add_reaction(f"{chr(127462 + i)}")  # Adds reactions A, B, C...
 
 
-@bot.command()
+@bot.command(name="butter", description="Summons the power of butter.", category="Fun")
 async def butter(ctx):
     await ctx.reply("Oh No! The Butter Flies!")
     await ctx.reply(":butterfly:")
+
+help_commands = {
+    "Moderation": {
+        "ban": {"emoji": "🔨", "description": "Bans a user from the server.", "usage": "`;ban @user [reason]`"},
+        "kick": {"emoji": "👢", "description": "Kicks a user from the server.", "usage": "`;kick @user [reason]`"},
+        "warn": {"emoji": "⚠️", "description": "Warns a user and logs it.", "usage": "`;warn @user [reason]`"},
+        "report": {"emoji": "📩", "description": "Reports a user to staff.", "usage": "`;report @user [reason]`"}
+    },
+    "Utility": {
+        "poll": {"emoji": "📊", "description": "Creates a poll with reactions.", "usage": "`;poll <question>`"},
+        "quote": {"emoji": "💬", "description": "Quotes a message from a user.", "usage": "`;quote @user <message>`"},
+        "help": {"emoji": "❓", "description": "Shows this help menu.", "usage": "`;help [command]`"}
+    },
+    "Fun": {
+        "meme": {"emoji": "😂", "description": "Sends a random meme.", "usage": "`;meme`"},
+        "8ball": {"emoji": "🎱", "description": "Ask the magic 8-ball a question.", "usage": "`;8ball <question>`"},
+        "joke": {"emoji": "🤣", "description": "Tells a random joke.", "usage": "`;joke`"}
+    },
+    "Music": {
+        "play": {"emoji": "🎵", "description": "Plays a song from YouTube.", "usage": "`;play <song name>`"},
+        "skip": {"emoji": "⏭️", "description": "Skips the current song.", "usage": "`;skip`"},
+        "stop": {"emoji": "⏹️", "description": "Stops the music and leaves the voice channel.", "usage": "`;stop`"}
+    }
+}
+
+
+@bot.command()
+async def help(ctx, command=None):
+    embed = discord.Embed(title="Help Command", color=discord.Color(0xBE38F3))
+
+    # If a specific command is requested
+    if command:
+        command_info = None
+        for category, commands in help_commands.items():
+            if command in commands:
+                command_info = commands[command]
+                break
+
+        # If the command is found, show its details
+        if command_info:
+            embed.add_field(
+                name=f"{command_info['emoji']} {command}",
+                value=f"**Description:** {command_info['description']}\n**Usage:** {command_info['usage']}",
+                inline=False
+            )
+        else:
+            embed.add_field(name="Error", value="Command not found.", inline=False)
+
+    # If no command is requested, show all commands
+    else:
+        for category, commands in help_commands.items():
+            category_field = ""
+            for cmd, info in commands.items():
+                category_field += f"{info['emoji']} **{cmd}**: {info['description']}\n"
+
+            embed.add_field(
+                name=f"{category} Commands",
+                value=category_field,
+                inline=False
+            )
+
+    await ctx.send(embed=embed)
 
 
 bot.run(os.getenv('DISCORD_TOKEN'))
