@@ -691,8 +691,8 @@ async def ai(ctx, *, user_input: str):
                     await ctx.send(f"An error occurred: {e}")
                     return
 
-        # Send the AI response in the original channel
-        await ctx.send(response)
+    # Send the AI response in the original channel
+    await ctx.send(response)
 
 
 @bot.command()
@@ -1028,18 +1028,16 @@ async def on_message(message):
     await bot.process_commands(message)
 
 
-# Helper function to load data from JSON
-def load_data(file_path):
+def load_data():
     try:
-        with open(file_path, 'r') as f:
+        with open("mod_data.json", "r") as f:
             return json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         return {}
 
-
-# Helper function to save data to JSON
-def save_data(file_path, data):
-    with open(file_path, 'w') as f:
+# Save data function
+def save_data(data):
+    with open("mod_data.json", "w") as f:
         json.dump(data, f, indent=4)
 
 
@@ -1055,37 +1053,82 @@ async def send_dm_to_staff(guild, message):
 
 
 # Load data from files
-reports = load_data("reports_file2")
-warnings = load_data("warnings_file")
 
 
 
 
 
 # **Moderation Commands**
+async def send_dm(user: discord.Member, message: str):
+    try:
+        await user.send(message)
+    except discord.Forbidden:
+        print(f"❌ Could not DM {user.name} (DMs disabled)")
 
-# Kick Command
+
+
 @bot.command()
-@commands.has_role("Staff")
-async def kick(ctx, member: discord.Member, *, reason=None):
-    await member.kick(reason=reason)
-    await ctx.send(f'{member} has been kicked from the server.')
+@commands.has_permissions(kick_members=True)
+async def kick(ctx, member: discord.Member, *, reason="No reason provided"):
+    try:
+        await member.kick(reason=reason)
+        await ctx.send(f"✅ {member.mention} has been kicked for: **{reason}**")
 
-    # Send DM to staff
-    dm_message = f"{ctx.author.name} has kicked {member} from the server. Reason: {reason or 'No reason provided.'}"
-    await send_dm_to_staff(ctx, dm_message)
+        # Log to mod channel
+        log_channel = discord.utils.get(ctx.guild.text_channels, name="milo-mod-logs")
+        if log_channel:
+            await log_channel.send(f"👢 **{member}** was kicked by {ctx.author.mention} for: **{reason}**")
+
+    except discord.Forbidden:
+        await ctx.send("❌ I don’t have permission to kick this user.")
+    except Exception as e:
+        await ctx.send(f"⚠️ Error: {e}")
 
 
-# Ban Command
+# 🔨 **Ban Command**
 @bot.command()
-@commands.has_role("Staff")
-async def ban(ctx, member: discord.Member, *, reason=None):
-    await member.ban(reason=reason)
-    await ctx.send(f'{member} has been banned from the server.')
+@commands.has_permissions(ban_members=True)
+async def ban(ctx, member: discord.Member, *, reason="No reason provided"):
+    try:
+        await member.ban(reason=reason)
+        await ctx.send(f"✅ {member.mention} has been banned for: **{reason}**")
 
-    # Send DM to staff
-    dm_message = f"{ctx.author.name} has banned {member} from the server. Reason: {reason or 'No reason provided.'}"
-    await send_dm_to_staff(ctx, dm_message)
+        # Log to mod channel
+        log_channel = discord.utils.get(ctx.guild.text_channels, name="milo-mod-logs")
+        if log_channel:
+            await log_channel.send(f"⛔ **{member}** was banned by {ctx.author.mention} for: **{reason}**")
+    except discord.Forbidden:
+        await ctx.send("❌ I don’t have permission to ban this user.")
+    except Exception as e:
+        await ctx.send(f"⚠️ Error: {e}")
+
+
+# 🔨 **Report Command**
+@bot.command()
+async def report(ctx, member: discord.Member, *, reason="No reason provided"):
+    try:
+        data = load_data()
+        if "reports" not in data:
+            data["reports"] = []
+
+        # Store report in JSON
+        report_entry = {
+            "reporter": ctx.author.name,
+            "reported": member.name,
+            "reason": reason
+        }
+        data["reports"].append(report_entry)
+        save_data(data)
+
+        await ctx.send(f"✅ {ctx.author.mention}, your report on {member.mention} has been recorded.")
+
+        # Log to mod channel
+        log_channel = discord.utils.get(ctx.guild.text_channels, name="milo-mod-logs")
+        if log_channel:
+            await log_channel.send(
+                f"🚨 **Report Alert!** 🚨\n**Reporter:** {ctx.author.mention}\n**Accused:** {member.mention}\n**Reason:** {reason}")
+    except Exception as e:
+        await ctx.send(f"⚠️ Error: {e}")
 
 
 # Warn Command
@@ -1101,27 +1144,6 @@ async def warn(ctx, member: discord.Member, *, reason):
     # Send DM to staff
     dm_message = f"{ctx.author.name} has warned {member} for: {reason} in {ctx.guild.name}"
     await send_dm_to_staff(ctx.guild, dm_message)
-
-
-# Report Command
-@bot.command()
-async def report(ctx, member: discord.Member, *, report_reason):
-    if not member or not report_reason:
-        await ctx.send("Please provide a user and a reason for the report.")
-        return
-    if member.id not in reports:
-        reports[member.id] = []
-    reports[member.id].append({
-        "reported_by": ctx.author.name,
-        "reason": report_reason
-    })
-    save_data("reports_file", reports)
-    await ctx.send(f'Thank you for your report, {ctx.author}. It has been submitted to the admins.')
-
-    # Send DM to staff
-    dm_message = f"{ctx.author.name} has reported {member} for: {report_reason}"
-    await send_dm_to_staff(ctx, dm_message)
-
 # **Poll Command**
 
 @bot.command()
@@ -1140,6 +1162,12 @@ async def poll(ctx, question, *options):
 
     for i in range(len(options)):
         await poll_message.add_reaction(f"{chr(127462 + i)}")  # Adds reactions A, B, C...
+
+
+@bot.command()
+async def butter(ctx):
+    await ctx.reply("Oh No! The Butter Flies!")
+    await ctx.reply(":butterfly:")
 
 
 bot.run(os.getenv('DISCORD_TOKEN'))
