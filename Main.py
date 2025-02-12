@@ -1175,22 +1175,37 @@ help_commands = {
         "ban": {"emoji": "🔨", "description": "Bans a user from the server.", "usage": "`;ban @user [reason]`"},
         "kick": {"emoji": "👢", "description": "Kicks a user from the server.", "usage": "`;kick @user [reason]`"},
         "warn": {"emoji": "⚠️", "description": "Warns a user and logs it.", "usage": "`;warn @user [reason]`"},
-        "report": {"emoji": "📩", "description": "Reports a user to staff.", "usage": "`;report @user [reason]`"}
+        "report": {"emoji": "📩", "description": "Reports a user to staff.", "usage": "`;report @user [reason]`"},
+        "addcommand": {"emoji": "🛠️", "description": "Allows staff to add a custom command.", "usage": "`;addcommand [command_name] [response]`"},
+        "removecommand": {"emoji": "❌", "description": "Allows staff to remove a custom command.", "usage": "`;removecommand [command_name]`"},
     },
     "Utility": {
+        "help": {"emoji": "❓", "description": "Shows this help menu.", "usage": "`;help [command]`"},
+        "openpostcard": {"emoji": "🌍", "description": "Opens your postcards.", "usage": "`;openpostcard`"},
         "poll": {"emoji": "📊", "description": "Creates a poll with reactions.", "usage": "`;poll <question>`"},
-        "quote": {"emoji": "💬", "description": "Quotes a message from a user.", "usage": "`;quote @user <message>`"},
-        "help": {"emoji": "❓", "description": "Shows this help menu.", "usage": "`;help [command]`"}
+        "sendpostcard": {"emoji": "💌", "description": "Send a postcard to another user.", "usage": "`;sendpostcard @user <message>`"},
+        "coinflip": {"emoji": "🪙", "description": "Heads or Tails?", "usage": "`;coinflip`"},
+        "riggedcoinflip": {"emoji": "🤞", "description": "Heads or Heads? Win every bet!", "usage": "`;riggedcoinflip`"},
+        "choice": {"emoji": "🤔", "description": "Chooses between yes and no.", "usage": "`;choice`"},
+        "choice2": {"emoji": "🤔", "description": "Chooses between yes, no and maybe.", "usage": "`;choice2`"},
+    },
+    "Currency": {
+        "give": {"emoji": "💸", "description": "Give gems to another user.", "usage": "`;give @user [amount]`"},
+        "gemboard": {"emoji": "🏆", "description": "View the currency leaderboard.", "usage": "`;gemboard`"},
+        "balance": {"emoji": "💰", "description": "Check your balance.", "usage": "`;balance`"},
+        "daily": {"emoji": "✈️", "description": "Get 500 gems every day.", "usage": "`;daily`"}
+    },
+    "Leveling": {
+        "level": {"emoji": "📈", "description": "View your current level and XP.", "usage": "`;level`"}
     },
     "Fun": {
-        "meme": {"emoji": "😂", "description": "Sends a random meme.", "usage": "`;meme`"},
+        "butter": {"emoji": "🧈", "description": "Summons the power of butter.", "usage": "`;butter`"},
         "8ball": {"emoji": "🎱", "description": "Ask the magic 8-ball a question.", "usage": "`;8ball <question>`"},
-        "joke": {"emoji": "🤣", "description": "Tells a random joke.", "usage": "`;joke`"}
+        "ai": {"emoji": "🤖", "description": "Talk to Milo.", "usage": "`;ai <prompt>`"},
     },
-    "Music": {
-        "play": {"emoji": "🎵", "description": "Plays a song from YouTube.", "usage": "`;play <song name>`"},
-        "skip": {"emoji": "⏭️", "description": "Skips the current song.", "usage": "`;skip`"},
-        "stop": {"emoji": "⏹️", "description": "Stops the music and leaves the voice channel.", "usage": "`;stop`"}
+    "Image": {
+        "image": {"emoji": "📷", "description": "Gets an image.", "usage": "`;image <prompt>`"},
+        "gif": {"emoji": "🤣", "description": "Gets a gif.", "usage": "`;gif <prompt>`"},
     }
 }
 
