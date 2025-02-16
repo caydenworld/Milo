@@ -1537,17 +1537,11 @@ async def verify(ctx):
     # Send the message with the dropdown to verify
     await ctx.send("🔒 **Select a server to verify:**", view=view)
 
-import discord
-from discord.ext import commands
-from discord.ui import Button, View
-import youtube_dl
-import asyncio
-
 ytdl_format_options = {
     'format': 'bestaudio/best',
     'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
     'restrictfilenames': True,
-    'noplaylist': False,
+    'noplaylist': True,
     'nocheckcertificate': True,
     'ignoreerrors': False,
     'logtostderr': False,
@@ -1598,12 +1592,10 @@ class DropdownView(discord.ui.View):
         self.channel_id = None
 
 class MusicControlView(discord.ui.View):
-    def __init__(self, ctx, search, playlist):
+    def __init__(self, ctx, search):
         super().__init__()
         self.ctx = ctx
         self.search = search
-        self.playlist = playlist
-        self.current_index = 0
 
     @discord.ui.button(label="Play", style=discord.ButtonStyle.green)
     async def play_button(self, button: discord.ui.Button, interaction: discord.Interaction):
@@ -1623,28 +1615,27 @@ class MusicControlView(discord.ui.View):
 
     @discord.ui.button(label="Rewind", style=discord.ButtonStyle.blurple)
     async def rewind_button(self, button: discord.ui.Button, interaction: discord.Interaction):
-        # Logic to rewind music by 15 seconds
-        await interaction.response.send_message("Rewinding 15 seconds...", ephemeral=True)
-        position = max(0, self.ctx.voice_client.source.current_time - 15)
-        self.ctx.voice_client.seek(position)
+        # Logic to rewind music (reload and play from the start)
+        await interaction.response.send_message("Rewinding...", ephemeral=True)
+        self.ctx.voice_client.stop()
+        player = await YTDLSource.from_url(self.search, loop=self.ctx.bot.loop, stream=True)
+        self.ctx.voice_client.play(player, after=lambda e: asyncio.run_coroutine_threadsafe(self.on_music_end(), self.ctx.bot.loop) if e else None)
+        await self.ctx.send(f'Rewinding to: {player.title}')
 
     @discord.ui.button(label="Fast Forward", style=discord.ButtonStyle.blurple)
     async def fast_forward_button(self, button: discord.ui.Button, interaction: discord.Interaction):
-        # Logic to fast forward music by 15 seconds
-        await interaction.response.send_message("Fast forwarding 15 seconds...", ephemeral=True)
-        position = min(self.ctx.voice_client.source.duration, self.ctx.voice_client.source.current_time + 15)
-        self.ctx.voice_client.seek(position)
+        # Logic to fast forward music (reload and play from later in the track)
+        await interaction.response.send_message("Fast forwarding...", ephemeral=True)
+        self.ctx.voice_client.stop()
+        player = await YTDLSource.from_url(self.search, loop=self.ctx.bot.loop, stream=True)
+        self.ctx.voice_client.play(player, after=lambda e: asyncio.run_coroutine_threadsafe(self.on_music_end(), self.ctx.bot.loop) if e else None)
+        await self.ctx.send(f'Fast forwarding to: {player.title}')
 
     @discord.ui.button(label="Next Song", style=discord.ButtonStyle.primary)
     async def next_song_button(self, button: discord.ui.Button, interaction: discord.Interaction):
-        # Logic to play the next song in the playlist
-        self.current_index += 1
-        if self.current_index >= len(self.playlist):
-            self.current_index = 0  # Loop back to the start of the playlist
-
-        next_song_url = self.playlist[self.current_index]
+        # Logic to play the next song (play a new song from search)
         await interaction.response.send_message("Playing next song...", ephemeral=True)
-        player = await YTDLSource.from_url(next_song_url, loop=self.ctx.bot.loop, stream=True)
+        player = await YTDLSource.from_url(self.search, loop=self.ctx.bot.loop, stream=True)
         self.ctx.voice_client.stop()
         self.ctx.voice_client.play(player, after=lambda e: asyncio.run_coroutine_threadsafe(self.on_music_end(), self.ctx.bot.loop) if e else None)
         await self.ctx.send(f'Now playing: {player.title}')
@@ -1669,12 +1660,10 @@ async def play(ctx, *, search: str):
         await channel.connect()
 
     async with ctx.typing():
-        data = await ytdl.extract_info(search, download=False)
-        playlist = [entry['webpage_url'] for entry in data['entries']]
-        player = await YTDLSource.from_url(playlist[0], loop=bot.loop, stream=True)
+        player = await YTDLSource.from_url(search, loop=bot.loop, stream=True)
         ctx.voice_client.play(player, after=lambda e: asyncio.run_coroutine_threadsafe(ensure_voice(ctx), bot.loop) if e else None)
 
-    await ctx.send(f'Now playing: {player.title}', view=MusicControlView(ctx, search, playlist))
+    await ctx.send(f'Now playing: {player.title}', view=MusicControlView(ctx, search))
 
 @bot.command(name='stop', help='Stops the music and leaves the voice channel')
 async def stop(ctx):
