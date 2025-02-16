@@ -1,6 +1,8 @@
 import discord
 import os
-from discord.ext import commands
+
+import ytdl
+from discord.ext import commands, tasks
 import requests
 import random
 import json
@@ -13,7 +15,7 @@ from PIL import Image, ImageDraw, ImageFont
 from io import BytesIO
 from discord.ui import InputText, Select, View, Modal, Button
 from discord.utils import get
-import youtube_dl
+import yt_dlp as youtube_dl
 import asyncio
 import ffmpeg
 
@@ -1537,23 +1539,26 @@ async def verify(ctx):
     # Send the message with the dropdown to verify
     await ctx.send("🔒 **Select a server to verify:**", view=view)
 
+
 ytdl_format_options = {
     'format': 'bestaudio/best',
     'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
     'restrictfilenames': True,
-    'noplaylist': True,
+    'noplaylist': False,
     'nocheckcertificate': True,
-    'ignoreerrors': False,
+    'ignoreerrors': True,
     'logtostderr': False,
     'quiet': True,
-    'no_warnings': True,
+    'no_warnings': False,  # Enable warnings
     'default_search': 'auto',
     'source_address': '0.0.0.0'
 }
 
 ffmpeg_options = {
+    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
     'options': '-vn'
 }
+
 ytdl = youtube_dl.YoutubeDL(ytdl_format_options)
 
 class YTDLSource(discord.PCMVolumeTransformer):
@@ -1569,14 +1574,12 @@ class YTDLSource(discord.PCMVolumeTransformer):
         data = await loop.run_in_executor(None, lambda: ytdl.extract_info(url, download=not stream))
 
         if 'entries' in data:
-            # Take first item from a playlist
-            data = data['entries'][0]
+            data = data['entries'][0]  # Take the first item from a playlist
 
         filename = data['url'] if stream else ytdl.prepare_filename(data)
         return cls(discord.FFmpegPCMAudio(filename, **ffmpeg_options), data=data)
 
 class ChannelDropdown(discord.ui.Select):
-    """Dropdown for selecting a voice channel."""
     def __init__(self, channels):
         options = [discord.SelectOption(label=channel.name, value=str(channel.id)) for channel in channels]
         super().__init__(placeholder="Select a voice channel", options=options)
@@ -1592,10 +1595,9 @@ class DropdownView(discord.ui.View):
         self.channel_id = None
 
 class MusicControlView(discord.ui.View):
-    def __init__(self, ctx, search):
+    def __init__(self, ctx):
         super().__init__()
         self.ctx = ctx
-        self.search = search
 
     @discord.ui.button(label="Play", style=discord.ButtonStyle.green)
     async def play_button(self, button: discord.ui.Button, interaction: discord.Interaction):
@@ -1613,43 +1615,12 @@ class MusicControlView(discord.ui.View):
         self.ctx.voice_client.stop()
         await self.ctx.voice_client.disconnect()
 
-    @discord.ui.button(label="Rewind", style=discord.ButtonStyle.blurple)
-    async def rewind_button(self, button: discord.ui.Button, interaction: discord.Interaction):
-        # Logic to rewind music (reload and play from the start)
-        await interaction.response.send_message("Rewinding...", ephemeral=True)
-        self.ctx.voice_client.stop()
-        player = await YTDLSource.from_url(self.search, loop=self.ctx.bot.loop, stream=True)
-        self.ctx.voice_client.play(player, after=lambda e: asyncio.run_coroutine_threadsafe(self.on_music_end(), self.ctx.bot.loop) if e else None)
-        await self.ctx.send(f'Rewinding to: {player.title}')
-
-    @discord.ui.button(label="Fast Forward", style=discord.ButtonStyle.blurple)
-    async def fast_forward_button(self, button: discord.ui.Button, interaction: discord.Interaction):
-        # Logic to fast forward music (reload and play from later in the track)
-        await interaction.response.send_message("Fast forwarding...", ephemeral=True)
-        self.ctx.voice_client.stop()
-        player = await YTDLSource.from_url(self.search, loop=self.ctx.bot.loop, stream=True)
-        self.ctx.voice_client.play(player, after=lambda e: asyncio.run_coroutine_threadsafe(self.on_music_end(), self.ctx.bot.loop) if e else None)
-        await self.ctx.send(f'Fast forwarding to: {player.title}')
-
-    @discord.ui.button(label="Next Song", style=discord.ButtonStyle.primary)
-    async def next_song_button(self, button: discord.ui.Button, interaction: discord.Interaction):
-        # Logic to play the next song (play a new song from search)
-        await interaction.response.send_message("Playing next song...", ephemeral=True)
-        player = await YTDLSource.from_url(self.search, loop=self.ctx.bot.loop, stream=True)
-        self.ctx.voice_client.stop()
-        self.ctx.voice_client.play(player, after=lambda e: asyncio.run_coroutine_threadsafe(self.on_music_end(), self.ctx.bot.loop) if e else None)
-        await self.ctx.send(f'Now playing: {player.title}')
-
-    async def on_music_end(self):
-        await self.ctx.voice_client.disconnect()
-
 @bot.command(name='play', help='Plays music in a selected voice channel')
 async def play(ctx, *, search: str):
     if ctx.voice_client is None:
         view = DropdownView(channels=ctx.guild.voice_channels)
         await ctx.send("Select a voice channel to join:", view=view)
 
-        # Wait for the user to select a channel
         await view.wait()
 
         if view.channel_id is None:
@@ -1659,11 +1630,19 @@ async def play(ctx, *, search: str):
         channel = bot.get_channel(int(view.channel_id))
         await channel.connect()
 
+    loop = bot.loop  # Define the event loop
     async with ctx.typing():
-        player = await YTDLSource.from_url(search, loop=bot.loop, stream=True)
-        ctx.voice_client.play(player, after=lambda e: asyncio.run_coroutine_threadsafe(ensure_voice(ctx), bot.loop) if e else None)
+        data = await loop.run_in_executor(None, lambda: ytdl.extract_info(search, download=False))
 
-    await ctx.send(f'Now playing: {player.title}', view=MusicControlView(ctx, search))
+        if 'entries' in data:
+            playlist = [entry['webpage_url'] for entry in data['entries']]
+            player = await YTDLSource.from_url(playlist[0], loop=loop, stream=True)
+        else:
+            player = await YTDLSource.from_url(data['webpage_url'], loop=loop, stream=True)
+
+        ctx.voice_client.play(player, after=lambda e: asyncio.run_coroutine_threadsafe(ensure_voice(ctx), loop) if e else None)
+
+    await ctx.send(f'Now playing: {player.title}', view=MusicControlView(ctx))
 
 @bot.command(name='stop', help='Stops the music and leaves the voice channel')
 async def stop(ctx):
@@ -1679,4 +1658,3 @@ async def ensure_voice(ctx):
         else:
             await ctx.send("You are not connected to a voice channel.")
             raise commands.CommandError("Author not connected to a voice channel.")
-bot.run(os.getenv('DISCORD_TOKEN'))
