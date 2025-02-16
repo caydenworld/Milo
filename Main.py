@@ -8,6 +8,10 @@ import time
 from openai import OpenAI
 from eight_ball_answers import eight_ball_answers
 from dotenv import load_dotenv
+import re
+from PIL import Image, ImageDraw, ImageFont
+from io import BytesIO
+
 load_dotenv()
 
 # Files for storage
@@ -25,6 +29,16 @@ intents.members = True
 bot = commands.Bot(command_prefix=';', intents=intents, help_command=None)
 
 SETTINGS_FILE = "Settings.json"
+
+async def send_dm_to_staff(guild, message):
+    log_channel = discord.utils.get(guild.text_channels, name="milo-mod-logs")
+
+    if not log_channel:
+        print("Log channel 'milo-mod-logs' not found!")
+        await message.send("Please use *;modsetup* to correctly setup your server.")
+        return
+
+    await log_channel.send(message)
 
 def load_settings():
     """Loads settings from Settings.json or returns an empty dictionary if the file doesn't exist."""
@@ -445,7 +459,8 @@ async def on_command_error(ctx, error):
     elif isinstance(error, commands.CommandNotFound):
         await ctx.send("Command not found. Please check the available commands.")
     else:
-        await ctx.send(f"An error occurred while processing your request. Error code: {error}")
+        await ctx.send(f"An error occurred while processing your request. Error code: {error}. If the issue persists, please contact the server admin to make sure that I have the necessary permissions.")
+        send_dm_to_staff(ctx.guild, f"⚠️ An error occured with the bot in {ctx.channel}. \n User: {ctx.author.mention} \n Error: {error} \n Please make sure that Milo has the necessary permissions. If it does, please let us know about the error by posting the error code in our [github](https://github.com/caydenworld/Milo/).")
         print(f"An error occured in a server {error}")
 
 @bot.command(name="addstaff", description="Adds a member to the staff role.", category="Moderation")
@@ -656,9 +671,10 @@ async def image(ctx, *, query):
 
 @bot.command(name="gif", description="Gets a gif of choice. ", category="Image")
 async def gif(ctx, *, query):
-    tenorapikey = os.getenv('TENOR_API')
-    clientkey = "The_Path"
-    await ctx.send(get_random_gif(query, tenorapikey, clientkey))
+    async with ctx.typing():
+        tenorapikey = os.getenv('TENOR_API')
+        clientkey = "The_Path"
+        await ctx.send(get_random_gif(query, tenorapikey, clientkey))
 
 
 @bot.command(name="ai", description="Talk to Milo!", category="Fun")
@@ -1042,15 +1058,7 @@ def save_data(data):
         json.dump(data, f, indent=4)
 
 
-async def send_dm_to_staff(guild, message):
-    log_channel = discord.utils.get(guild.text_channels, name="milo-mod-logs")
 
-    if not log_channel:
-        print("Log channel 'milo-mod-logs' not found!")
-        await message.send("Please use *;modsetup* to correctly setup your server.")
-        return
-
-    await log_channel.send(message)
 
 
 # Load data from files
@@ -1182,7 +1190,7 @@ help_commands = {
     "Utility": {
         "help": {"emoji": "❓", "description": "Shows this help menu.", "usage": "`;help [command]`"},
         "openpostcard": {"emoji": "🌍", "description": "Opens your postcards.", "usage": "`;openpostcard`"},
-        "poll": {"emoji": "📊", "description": "Creates a poll with reactions.", "usage": "`;poll <question>`"},
+        "poll": {"emoji": "📊", "description": "Creates a poll with reactions.", "usage": "`;poll <question> option1` Surrond the question and options in""."},
         "sendpostcard": {"emoji": "💌", "description": "Send a postcard to another user.", "usage": "`;sendpostcard @user <message>`"},
         "coinflip": {"emoji": "🪙", "description": "Heads or Tails?", "usage": "`;coinflip`"},
         "riggedcoinflip": {"emoji": "🤞", "description": "Heads or Heads? Win every bet!", "usage": "`;riggedcoinflip`"},
@@ -1248,4 +1256,136 @@ async def help(ctx, command=None):
     await ctx.send(embed=embed)
 
 
+def is_url(string):
+    url_pattern = re.compile(r'https?://(?:www\.)?\S+\.(?:jpg|jpeg|png|gif|webp)')
+    return re.match(url_pattern, string)
+
+
+# Dummy Pixabay function (Replace with actual API call)
+def get_pixabay_image(query):
+    return "https://cdn.pixabay.com/photo/2015/04/23/22/00/tree-736885_1280.jpg"  # Example image
+
+
+# Function to get the Impact font
+def get_impact_font(size):
+    try:
+        return ImageFont.truetype("impact.ttf", size)  # Ensure impact.ttf exists
+    except:
+        return ImageFont.load_default()  # Fallback
+
+
+# Meme command
+@bot.command(name="meme", description="Generates a meme with a given image and text.")
+async def meme(ctx, image_input: str, *, text: str):
+    async with ctx.thinking():
+        try:
+            # Use the URL directly if it's valid; otherwise, get an image from Pixabay
+            image_url = image_input if is_url(image_input) else get_pixabay_image(image_input)
+
+            if not image_url:
+                await ctx.send("Couldn't find a valid image. Try another keyword.")
+                return
+
+            # Download the image
+            response = requests.get(image_url)
+            if response.status_code != 200:
+                await ctx.send("Failed to download image.")
+                return
+
+            # Open image with PIL
+            image = Image.open(BytesIO(response.content))
+
+            # Add text (Meme Style)
+            draw = ImageDraw.Draw(image)
+            font_size = int(image.width * 0.1)
+            font = get_impact_font(font_size)
+
+            # Text positioning
+            text_x = image.width // 2
+            text_y = int(image.height * 0.05)
+
+            # Outline effect
+            outline_range = 3
+            for x_offset in range(-outline_range, outline_range + 1):
+                for y_offset in range(-outline_range, outline_range + 1):
+                    draw.text((text_x + x_offset, text_y + y_offset), text, font=font, fill="black", anchor="mm")
+
+            # Main text
+            draw.text((text_x, text_y), text, font=font, fill="white", anchor="mm")
+
+            # Save and send the meme
+            with BytesIO() as image_binary:
+                image.save(image_binary, "PNG")
+                image_binary.seek(0)
+                await ctx.send(file=discord.File(image_binary, "meme.png"))
+
+        except Exception as e:
+            await ctx.send(f"Error: {e}")
+
+# 🚨 Message Filter: Deletes messages containing bad words
+@bot.event
+async def on_message(message):
+    if message.author.bot or not message.guild:
+        return  # Ignore bots & DMs
+
+    guild_id = str(message.guild.id)
+    settings = load_settings()
+    bad_words = settings.get(guild_id, {}).get("bad_words", [])
+
+    for word in bad_words:
+        if word.lower() in message.content.lower():
+            await message.delete()
+            await message.channel.send(f"{message.author.mention}, please avoid using that word!")
+            return
+
+    await bot.process_commands(message)  # Ensure commands still work
+
+# ✅ Command: Add a bad word
+@bot.command(name="addbadword", description="Add a word to the filter (Admins only)")
+@commands.has_role("Staff")
+async def addbadword(ctx, *, word):
+    guild_id = str(ctx.guild.id)
+    settings = load_settings()
+    bad_words = settings.get(guild_id, {}).get("bad_words", [])
+
+    if word.lower() in bad_words:
+        await ctx.send("That word is already in the filter!")
+        return
+
+    bad_words.append(word.lower())
+    update_setting(guild_id, "bad_words", bad_words)
+    await ctx.send(f"Added `{word}` to the bad word filter.")
+
+# ❌ Command: Remove a bad word
+@bot.command(name="removebadword", description="Remove a word from the filter (Admins only)")
+@commands.has_role("Staff")
+async def removebadword(ctx, *, word):
+    guild_id = str(ctx.guild.id)
+    settings = load_settings()
+    bad_words = settings.get(guild_id, {}).get("bad_words", [])
+
+    if word.lower() not in bad_words:
+        await ctx.send("That word is not in the filter!")
+        return
+
+    bad_words.remove(word.lower())
+    update_setting(guild_id, "bad_words", bad_words)
+    await ctx.send(f"Removed `{word}` from the bad word filter.")
+
+# 📜 Command: List all filtered words
+@bot.command(name="listbadwords", description="List all filtered words for this server")
+@commands.has_role("Staff")
+async def listbadwords(ctx):
+    guild_id = str(ctx.guild.id)
+    settings = load_settings()
+    bad_words = settings.get(guild_id, {}).get("bad_words", [])
+
+    if not bad_words:
+        await ctx.send("No bad words are currently filtered.")
+    else:
+        await ctx.send("Filtered words: " + ", ".join(bad_words))
+
+
+
+# Run the bot
 bot.run(os.getenv('DISCORD_TOKEN'))
