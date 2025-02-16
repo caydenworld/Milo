@@ -1,6 +1,6 @@
 import discord
 import os
-
+import datetime
 import ytdl
 from discord.ext import commands, tasks
 import requests
@@ -36,6 +36,22 @@ intents.members = True
 bot = commands.Bot(command_prefix=';', intents=intents, help_command=None)
 
 SETTINGS_FILE = "Settings.json"
+# Load inventory from JSON
+# Load inventory from JSON
+def load_inventory():
+    try:
+        with open("inventory.json", "r") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {}
+
+# Save inventory to JSON
+def save_inventory(data):
+    with open("inventory.json", "w") as f:
+        json.dump(data, f, indent=4)
+
+# Change variable name to avoid conflicts
+user_inventory_data = load_inventory()
 
 async def send_dm_to_staff(guild, message):
     log_channel = discord.utils.get(guild.text_channels, name="milo-mod-logs")
@@ -79,26 +95,49 @@ def update_setting(guild_id: str, setting_key: str, setting_value):
 
 
 
+# Load the currency data from the JSON file
 def load_currency():
     try:
         with open("currency.json", "r") as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return {}
-
+            data = json.load(f)
+            if not isinstance(data, dict):
+                return {}  # Ensure the data is a dictionary
+            return data
+    except (FileNotFoundError, json.JSONDecodeError):
+        return   # Return empty dictionary if file is missing or corrupted
 
 # Save currency data
 def save_currency(data):
     with open("currency.json", "w") as f:
         json.dump(data, f, indent=4)
 
+# Load the marketplace items from the JSON file
+def load_marketplace():
+    try:
+        with open("marketplace.json", "r") as f:
+            data = json.load(f)
+            if not isinstance(data, dict):
+                return {}  # Ensure the data is a dictionary
+            return data
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}  # Return empty dictionary if file is missing or corrupted
 
-# Get user balance (per server)
+# Save marketplace items
+def save_marketplace(data):
+    with open("marketplace.json", "w") as f:
+        json.dump(data, f, indent=4)
+
 def get_balance(guild_id, user_id):
     data = load_currency()
-    return data.get(str(guild_id), {}).get(str(user_id), 0)
+    guild_data = data.get(str(guild_id), {})  # Ensure this is always a dictionary
 
+    # Get the user data dictionary (default to an empty dict)
+    user_data = guild_data.get(str(user_id), {})
 
+    if isinstance(user_data, dict):  # If user_data is a dictionary, return the 'gems' value
+        return int(user_data.get("gems", 0))  # Default to 0 if 'gems' key is missing
+
+    return 0  # Return 0 if user_data is not a dictionary (unexpected case)
 # Add money to a user (per server)
 def add_money(guild_id, user_id, amount):
     data = load_currency()
@@ -108,11 +147,10 @@ def add_money(guild_id, user_id, amount):
     if guild_id not in data:
         data[guild_id] = {}
     if user_id not in data[guild_id]:
-        data[guild_id][user_id] = 0
+        data[guild_id][user_id] = {"gems": 0}  # Ensure it's a dictionary with "gems"
 
-    data[guild_id][user_id] += amount
+    data[guild_id][user_id]["gems"] += int(amount)  # Update the gems count
     save_currency(data)
-
 
 # Remove money from a user (per server)
 def remove_money(guild_id, user_id, amount):
@@ -120,13 +158,27 @@ def remove_money(guild_id, user_id, amount):
     guild_id = str(guild_id)
     user_id = str(user_id)
 
-    if guild_id not in data or user_id not in data[guild_id] or data[guild_id][
-            user_id] < amount:
+    if guild_id not in data or user_id not in data[guild_id]:
+        return False  # Not enough money or user does not exist
+
+    user_data = data[guild_id][user_id]
+
+    if isinstance(user_data, dict):  # If it's a dictionary, extract the 'gems' value
+        user_balance = user_data.get("gems", 0)  # Ensure 'gems' key is used
+    else:
+        user_balance = user_data  # If it's already a number, use it directly
+
+    if user_balance < amount:
         return False  # Not enough money
 
-    data[guild_id][user_id] -= amount
+    # Decrease the 'gems' balance if it's a dictionary
+    if isinstance(user_data, dict):
+        user_data["gems"] -= amount
+    else:
+        data[guild_id][user_id] -= amount  # If it's not a dictionary, just subtract from the balance directly
+
     save_currency(data)
-    return True
+    return True  # Successfully removed the money
 
 
 def load_cache():
@@ -458,18 +510,38 @@ async def on_raw_reaction_add(payload):
     else:
         print(f"❌ Role with ID '{role_id}' not found!")
 
+
 @bot.event
 async def on_command_error(ctx, error):
     if isinstance(error, commands.MissingRole):
-        await ctx.send("You need the 'Staff' role to use this command.")
+        await ctx.send("🚫 You need the 'Staff' role to use this command.")
+
     elif isinstance(error, commands.MissingPermissions):
-        await ctx.send("You don't have permission to use this command.")
+        await ctx.send("⛔ You don't have permission to use this command.")
+
     elif isinstance(error, commands.CommandNotFound):
-        await ctx.send("Command not found. Please check the available commands.")
+        await ctx.send("❓ Command not found. Please check `!help` for available commands.")
+
+    elif isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send(f"⚠️ Missing argument: `{error.param.name}`. Please provide all required inputs.")
+
+    elif isinstance(error, commands.BadArgument):
+        await ctx.send("⚠️ Invalid input. Please check your arguments and try again.")
+
     else:
-        await ctx.send(f"An error occurred while processing your request. Error code: {error}. If the issue persists, please contact the server admin to make sure that I have the necessary permissions.")
-        await send_dm_to_staff(ctx.guild, f"⚠️ An error occured with the bot in {ctx.channel}. \n User: {ctx.author.mention} \n Error: {error} \n Please make sure that Milo has the necessary permissions. If it does, please let us know about the error by posting the error code in our [github](https://github.com/caydenworld/Milo/).")
-        print(f"An error occured in a server {error}")
+        await ctx.send(
+            f"❌ An error occurred while processing your request. **Error code:** `{error}`. If the issue persists, contact the server admin.")
+
+        await send_dm_to_staff(
+            ctx.guild,
+            f"⚠️ An error occurred with the bot in {ctx.channel}. \n"
+            f"User: {ctx.author.mention} \n"
+            f"Error: {error} \n"
+            "Please make sure that Milo has the necessary permissions. "
+            "If it does, please report the error on our [GitHub](https://github.com/caydenworld/Milo/)."
+        )
+
+        print(f"⚠️ An error occurred in a server: {error}")
 
 @bot.command(name="addstaff", description="Adds a member to the staff role.", category="Moderation")
 @commands.has_role("Staff")  # Ensure the person has administrator permissions
@@ -851,13 +923,17 @@ async def openpostcard(ctx):
         await ctx.send("❌ You don’t have any postcards to open!")
 
 
-@bot.command(name="balance", description="Check your balance.", category="Currency")
+@bot.command()
 async def balance(ctx):
     guild_id = ctx.guild.id
     user_id = ctx.author.id
-    money = get_balance(guild_id, user_id)
-    await ctx.send(
-        f"💰 {ctx.author.name}, you have **{money} miles** in this server.")
+    user_balance = get_balance(guild_id, user_id)
+
+    if isinstance(user_balance, dict):
+        # If the balance is a dictionary, extract the relevant currency data
+        user_balance = user_balance.get('gems', 0)
+
+    await ctx.send(f'Your current balance is {user_balance} gems.')
 
 
 # 💸 Command: Give money to another user
@@ -876,7 +952,7 @@ async def give(ctx, member: discord.Member, amount: int):
         await ctx.send(
             f"✅ {ctx.author.name} gave {amount} gems to {member.name}.")
     else:
-        await ctx.send("❌ You don’t have enough miles.")
+        await ctx.send("❌ You don’t have enough gems.")
 
 
 # 🏆 Command: Currency leaderboard (server-specific)
@@ -896,7 +972,7 @@ async def gemboard(ctx):
 
     # Sort users by mileage (just miles)
     sorted_users = sorted(data[guild_id].items(),
-                          key=lambda x: x[1]['miles'],
+                          key=lambda x: x[1]['gems'],
                           reverse=True)
 
     leaderboard_message = "🏆 **Richest in This Server** 🏆\n\n"
@@ -904,7 +980,7 @@ async def gemboard(ctx):
     for idx, (user_id,
               user_data) in enumerate(sorted_users[:10]):  # Top 10 users
         user = await bot.fetch_user(int(user_id))
-        leaderboard_message += f"**{idx + 1}. {user.name}** - {user_data['miles']} gems\n"
+        leaderboard_message += f"**{idx + 1}. {user.name}** - {user_data['gems']} gems\n"
 
     await ctx.send(leaderboard_message)
 
@@ -984,13 +1060,13 @@ async def daily(ctx):
     if guild_id not in data:
         data[guild_id] = {}
     if user_id not in data[guild_id]:
-        data[guild_id][user_id] = {"miles": 0, "last_flight": 0}
+        data[guild_id][user_id] = {"gems": 0, "last_daily": 0}
 
     # Check if 24 hours have passed since the last flight
     current_time = time.time()
-    if current_time - data[guild_id][user_id]["last_flight"] < 86400:
+    if current_time - data[guild_id][user_id]["last_daily"] < 86400:
         time_left = 86400 - (current_time -
-                             data[guild_id][user_id]["last_flight"])
+                             data[guild_id][user_id]["last_daily"])
         hours_left = int(time_left // 3600)
         minutes_left = int((time_left % 3600) // 60)
         await ctx.send(
@@ -999,15 +1075,15 @@ async def daily(ctx):
         return
 
     # Give 500 miles and update last flight time
-    data[guild_id][user_id]["miles"] += 500
-    data[guild_id][user_id]["last_flight"] = current_time
+    data[guild_id][user_id]["gems"] += 500
+    data[guild_id][user_id]["last_daily"] = current_time
 
     # Save updated data
     with open("currency.json", "w") as f:
         json.dump(data, f, indent=4)
 
     await ctx.send(
-        f"✈️ {ctx.author.mention}, You earned **500 gems** 💎! Come back in 24 hours for another 500."
+        f"💎 {ctx.author.mention}, You earned **500 gems** 💎! Come back in 24 hours for another 500."
     )
 
 @bot.command(name="addcommand", description="Allows staff to add a custom command.", category="Moderation")
@@ -1658,3 +1734,427 @@ async def ensure_voice(ctx):
         else:
             await ctx.send("You are not connected to a voice channel.")
             raise commands.CommandError("Author not connected to a voice channel.")
+
+
+# Marketplace Dropdown UI
+marketplace_data = load_marketplace()
+
+
+class MarketplaceDropdown(discord.ui.Select):
+    def __init__(self):
+        options = [
+            discord.SelectOption(label=item, description=f"{marketplace_data[item]['price']} currency") for item in
+            marketplace_data
+        ]
+        super().__init__(placeholder="Select an item...", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        item_name = self.values[0]
+        item = marketplace_data[item_name]
+        item_price = item["price"]
+        role_id = item.get("role_id")
+        role = discord.utils.get(interaction.guild.roles, id=role_id) if role_id else None
+
+        guild_id = interaction.guild.id
+        user_id = interaction.user.id
+        balance = get_balance(guild_id, user_id)
+
+        if balance < item_price:
+            await interaction.response.send_message('You do not have enough currency to buy this item.', ephemeral=True)
+            return
+
+        if remove_money(guild_id, user_id, item_price):
+            inventory = load_inventory()
+            if str(user_id) not in inventory:
+                inventory[str(user_id)] = []
+            inventory[str(user_id)].append(item_name)
+            save_inventory(inventory)
+
+            if role:
+                await interaction.user.add_roles(role)
+                await interaction.response.send_message(
+                    f'You have successfully bought {item_name} and received the {role.name} role!', ephemeral=True)
+            else:
+                await interaction.response.send_message(f'You have successfully bought {item_name}!', ephemeral=True)
+        else:
+            await interaction.response.send_message('An error occurred during the transaction.', ephemeral=True)
+
+
+class MarketplaceView(discord.ui.View):
+    def __init__(self):
+        super().__init__()
+        self.add_item(MarketplaceDropdown())
+
+
+# Use Item Dropdown UI
+class UseItemDropdown(discord.ui.Select):
+    def __init__(self, user_id):
+        inventory = load_inventory()
+        user_items = inventory.get(str(user_id), [])
+
+        options = [
+            discord.SelectOption(label=item, description="Use this item") for item in user_items
+        ] if user_items else [
+            discord.SelectOption(label="No Items", description="You have no items", default=True, disabled=True)]
+
+        super().__init__(placeholder="Select an item to use...", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        item_name = self.values[0]
+        if item_name == "No Items":
+            await interaction.response.send_message("You have no items to use.", ephemeral=True)
+            return
+
+        item = marketplace_data.get(item_name, {})
+        on_use_message = item.get("on_use", "You used the item.")
+
+        inventory = load_inventory()
+        inventory[str(interaction.user.id)].remove(item_name)
+        save_inventory(inventory)
+
+        await interaction.response.send_message(f"{interaction.user.mention} used **{item_name}**!\n\n{on_use_message}")
+
+
+class UseItemView(discord.ui.View):
+    def __init__(self, user_id):
+        super().__init__()
+        self.add_item(UseItemDropdown(user_id))
+
+@bot.command()
+@commands.has_role("Staff")
+async def additem(ctx, item_name: str, item_price: int, on_use: str, role: discord.Role = None):
+    if role:
+        marketplace_data[item_name] = {"price": item_price, "role_id": role.id, "on_use": on_use}
+        await ctx.send(
+            f'Added item: {item_name} for {item_price} currency, which grants the {role.name} role. Use message: "{on_use}"')
+    else:
+        marketplace_data[item_name] = {"price": item_price, "on_use": on_use}
+        await ctx.send(
+            f'Added item: {item_name} for {item_price} currency, which grants no role. Use message: "{on_use}"')
+
+    save_marketplace(marketplace_data)
+
+
+@bot.command()
+async def marketplace(ctx):
+    view = MarketplaceView()
+    await ctx.send('Select an item from the marketplace:', view=view)
+
+
+@bot.command()
+async def inventory(ctx):
+    inventory = load_inventory()
+    user_items = inventory.get(str(ctx.author.id), [])
+
+    if not user_items:
+        await ctx.send("Your inventory is empty.")
+    else:
+        items_list = "\n".join(f"- {item}" for item in user_items)
+        await ctx.send(f"**Your Inventory:**\n{items_list}")
+
+
+@bot.command()
+async def useitem(ctx):
+    view = UseItemView(ctx.author.id)
+    await ctx.send("Select an item to use:", view=view)
+
+
+# Sell Item Dropdown UI
+class SellItemDropdown(discord.ui.Select):
+    def __init__(self, user_id):
+        # Use the correct inventory variable name
+        user_inventory = user_inventory_data.get(str(user_id), {})
+
+        options = [
+            discord.SelectOption(label=item, description=f"Sell this item for {details['price'] // 2} currency")
+            for item, details in user_inventory.items()
+        ]
+
+        # If the user has no items, show a default "No Items" option
+        if not options:
+            options = [discord.SelectOption(label="No Items", description="You have no items to sell", default=True)]
+
+        super().__init__(placeholder="Select an item to sell...", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        item_name = self.values[0]
+
+        # Prevent selling if "No Items" is selected
+        if item_name == "No Items":
+            await interaction.response.send_message("You have no items to sell!", ephemeral=True)
+            return
+
+        user_id = str(interaction.user.id)
+        guild = interaction.guild
+        user_inventory = user_inventory_data.get(user_id, {})
+
+        # Ensure the item exists before proceeding
+        if item_name not in user_inventory:
+            await interaction.response.send_message("Item not found in your inventory!", ephemeral=True)
+            return
+
+        sell_price = user_inventory[item_name]["price"] // 2  # Sell for half price
+        role_id = user_inventory[item_name].get("role_id")  # Get role ID
+
+        # Remove the item from inventory
+        del user_inventory_data[user_id][item_name]
+        save_inventory(user_inventory_data)  # Save updated inventory
+
+        # Add currency back
+        add_money(guild.id, interaction.user.id, sell_price)
+
+        # Remove the role if it exists
+        if role_id:
+            role = discord.utils.get(guild.roles, id=role_id)
+            if role and role in interaction.user.roles:
+                await interaction.user.remove_roles(role)
+
+        await interaction.response.send_message(f"You sold **{item_name}** for **{sell_price} currency**!", ephemeral=True)
+class SellItemView(discord.ui.View):
+    def __init__(self, user_id):
+        super().__init__()
+        self.add_item(SellItemDropdown(user_id))
+
+@bot.command()
+async def sellitem(ctx):
+    user_id = str(ctx.author.id)
+
+    # Use the correct inventory variable
+    if user_id not in user_inventory_data or not user_inventory_data[user_id]:
+        await ctx.send("You have no items to sell.")
+        return
+
+    view = SellItemView(ctx.author.id)
+    await ctx.send("Select an item to sell:", view=view)
+@bot.command()
+async def slots(ctx, bet: int):
+    user_id = str(ctx.author.id)
+    guild_id = str(ctx.guild.id)
+    balance = get_balance(guild_id, user_id)
+    if bet <= 0:
+        await ctx.send("You must bet a positive amount!")
+        return
+    if balance < bet:
+        await ctx.send("You don't have enough money to place this bet!")
+        return
+    # Slot symbols
+    symbols = ["🍒", "🍋", "🍇", "🍊", "🔔", "⭐", "💎"]
+    slot_result = [random.choice(symbols) for _ in range(3)]
+    # Check for wins
+    if len(set(slot_result)) == 1:  # All three match
+        winnings = bet * 5
+        result_text = "🎉 JACKPOT! You won 5x your bet!"
+    elif len(set(slot_result)) == 2:  # Two match
+        winnings = bet * 2
+        result_text = "✅ You won 2x your bet!"
+    else:
+        winnings = -bet
+        result_text = "❌ You lost!"
+    # Update balance
+    add_money(guild_id, user_id, winnings if winnings > 0 else -bet)
+    # Show slot result
+    await ctx.send(f"🎰 **Slots:** {' | '.join(slot_result)}\n{result_text} (New balance: {get_balance(guild_id, user_id)})")
+@bot.command()
+async def blackjack(ctx, bet: int):
+    user_id = str(ctx.author.id)
+    guild_id = str(ctx.guild.id)
+    balance = get_balance(guild_id, user_id)
+
+    if bet <= 0:
+        await ctx.send("You must bet a positive amount!")
+        return
+
+    if balance < bet:
+        await ctx.send("You don't have enough money to place this bet!")
+        return
+
+    def draw_card():
+        return random.choice(["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"])
+
+    def hand_value(hand):
+        value = 0
+        aces = 0
+        for card in hand:
+            if card in ["J", "Q", "K"]:
+                value += 10
+            elif card == "A":
+                aces += 1
+                value += 11  # Assume ace is 11 initially
+            else:
+                value += int(card)
+
+        while value > 21 and aces:
+            value -= 10  # Convert an Ace from 11 to 1
+            aces -= 1
+
+        return value
+
+    # Player's initial hand
+    player_hand = [draw_card(), draw_card()]
+    player_total = hand_value(player_hand)
+
+    # Dealer's initial hand
+    dealer_hand = [draw_card(), draw_card()]
+    dealer_total = hand_value(dealer_hand)
+
+    await ctx.send(f"🃏 **Your hand:** {', '.join(player_hand)} (Total: {player_total})\n🤖 **Dealer's hand:** {dealer_hand[0]}, ❓")
+
+    if player_total == 21:
+        add_money(guild_id, user_id, bet * 2)
+        await ctx.send(f"🎉 **BLACKJACK!** You win 2x your bet! New balance: {get_balance(guild_id, user_id)}")
+        return
+
+    while player_total < 21:
+        await ctx.send("Type `hit` to draw another card or `stand` to hold.")
+        try:
+            msg = await bot.wait_for("message", timeout=30, check=lambda m: m.author == ctx.author and m.content.lower() in ["hit", "stand"])
+        except:
+            await ctx.send("Game timed out.")
+            return
+
+        if msg.content.lower() == "hit":
+            player_hand.append(draw_card())
+            player_total = hand_value(player_hand)
+            await ctx.send(f"🃏 **Your hand:** {', '.join(player_hand)} (Total: {player_total})")
+
+        if player_total > 21:
+            add_money(guild_id, user_id, -bet)
+            await ctx.send(f"💀 **BUST!** You lose! New balance: {get_balance(guild_id, user_id)}")
+            return
+
+        if msg.content.lower() == "stand":
+            break
+
+    # Dealer's turn
+    while dealer_total < 17:
+        dealer_hand.append(draw_card())
+        dealer_total = hand_value(dealer_hand)
+
+    await ctx.send(f"🤖 **Dealer's final hand:** {', '.join(dealer_hand)} (Total: {dealer_total})")
+
+    if dealer_total > 21 or player_total > dealer_total:
+        add_money(guild_id, user_id, bet)
+        await ctx.send(f"🎉 **You win!** New balance: {get_balance(guild_id, user_id)}")
+    elif dealer_total > player_total:
+        add_money(guild_id, user_id, -bet)
+        await ctx.send(f"❌ **Dealer wins!** You lost. New balance: {get_balance(guild_id, user_id)}")
+    else:
+        await ctx.send("🤝 **It's a tie!** Your bet is returned.")
+
+
+class ScratchButton(discord.ui.Button):
+    """Button representing a scratch card spot."""
+
+    def __init__(self, row, col):
+        super().__init__(label="❔", style=discord.ButtonStyle.secondary, row=row)
+        self.row_index = row
+        self.col_index = col
+
+    async def callback(self, interaction: discord.Interaction):
+        """Handles button press and reveals the number."""
+        view: ScratchcardView = self.view  # Get the parent view
+        if len(view.user_choices) >= 3:
+            await interaction.response.defer()  # Ignore extra presses
+            return
+
+        # Reveal the number
+        value = view.grid[self.row_index][self.col_index]
+        self.label = str(value)
+        self.style = discord.ButtonStyle.success
+        self.disabled = True  # Disable after clicking
+
+        # Store the selected position
+        view.user_choices.append((self.row_index, self.col_index))
+
+        # Check win condition after 3 choices
+        if len(view.user_choices) == 3:
+            await view.check_win(interaction)
+
+        await interaction.response.edit_message(view=view)
+
+
+class ScratchcardView(discord.ui.View):
+    """Interactive Scratch Card View with a 5x5 Grid."""
+
+    def __init__(self, ctx, bet, grid):
+        super().__init__(timeout=60)
+        self.ctx = ctx
+        self.bet = bet
+        self.grid = grid
+        self.user_choices = []
+        self.result_sent = False
+        self.bot_message = None  # Store bot message
+
+        # Create a 5x5 button grid
+        for row in range(5):
+            for col in range(5):
+                self.add_item(ScratchButton(row, col))
+
+    async def check_win(self, interaction):
+        """Check if the user has won or lost after selecting 3 spots."""
+        if len(self.user_choices) < 3:
+            return  # Wait until 3 choices are made
+
+        # Get selected numbers
+        selected_values = [self.grid[row][col] for row, col in self.user_choices]
+
+        # Winning conditions
+        if selected_values[0] == selected_values[1] == selected_values[2]:  # All same
+            win = True
+        elif sorted(selected_values) == [1, 2, 3]:  # Ordered sequence
+            win = True
+        else:
+            win = False
+
+        # Rigged system: 1/6 chance of actually winning
+        if not win or random.randint(1, 6) != 1:
+            winnings = -self.bet
+            result_text = "❌ **You lost!** Better luck next time."
+        else:
+            winnings = self.bet * 4
+            result_text = "🎉 **JACKPOT!** You won 4x your bet!"
+
+        # Update balance
+        add_money(str(self.ctx.guild.id), str(self.ctx.author.id), winnings)
+
+        # Disable all buttons after game ends
+        for child in self.children:
+            child.disabled = True
+
+        # Edit the original message instead of using `.view`
+        await interaction.message.edit(
+            content=f"🎟️ **Scratch Card Result:** {result_text} (New balance: {get_balance(str(self.ctx.guild.id), str(self.ctx.author.id))})",
+            view=self)
+
+
+@bot.command()
+async def scratchcard(ctx, bet: int):
+    """Play the scratch card game with a 5x5 grid and button selection."""
+    user_id = str(ctx.author.id)
+    guild_id = str(ctx.guild.id)
+    balance = get_balance(guild_id, user_id)
+
+    if bet <= 0:
+        await ctx.send("You must bet a positive amount!")
+        return
+
+    if balance < bet:
+        await ctx.send("You don't have enough money to buy a scratch card!")
+        return
+
+    # Generate a 5x5 grid with random numbers (1-5)
+    grid = [[random.randint(1, 5) for _ in range(5)] for _ in range(5)]
+
+    # Deduct bet amount before the game starts
+    add_money(guild_id, user_id, -bet)
+
+    # Create the view
+    view = ScratchcardView(ctx, bet, grid)
+
+    # Send the game board with buttons and store the message
+    bot_message = await ctx.send("🎟️ **Scratch Card - Choose 3 Spots!**", view=view)
+
+    # Save the bot message inside the View
+    view.bot_message = bot_message
+
+bot.run(os.getenv('DISCORD_TOKEN'))
