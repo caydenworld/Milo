@@ -11,6 +11,10 @@ from dotenv import load_dotenv
 import re
 from PIL import Image, ImageDraw, ImageFont
 from io import BytesIO
+from discord.ui import InputText, Select, View, Modal, Button
+from discord.utils import get
+import youtube_dl
+import asyncio
 
 load_dotenv()
 
@@ -165,7 +169,7 @@ def save_user_data(data):
 
 
 # Function to update XP and level for a user
-def update_xp(user_id, xp_earned):
+async def update_xp(message, user_id, xp_earned):
     data = read_user_data()
 
     if user_id not in data:
@@ -179,6 +183,7 @@ def update_xp(user_id, xp_earned):
     if data[user_id]["xp"] >= xp_to_next_level:
         data[user_id]["level"] += 1
         data[user_id]["xp"] = 0  # Reset XP after leveling up
+        await message.reply(f"🥳 Congrats! You leveled up to level {data[user_id]["level"]}")
 
     save_user_data(data)
 
@@ -460,7 +465,7 @@ async def on_command_error(ctx, error):
         await ctx.send("Command not found. Please check the available commands.")
     else:
         await ctx.send(f"An error occurred while processing your request. Error code: {error}. If the issue persists, please contact the server admin to make sure that I have the necessary permissions.")
-        send_dm_to_staff(ctx.guild, f"⚠️ An error occured with the bot in {ctx.channel}. \n User: {ctx.author.mention} \n Error: {error} \n Please make sure that Milo has the necessary permissions. If it does, please let us know about the error by posting the error code in our [github](https://github.com/caydenworld/Milo/).")
+        await send_dm_to_staff(ctx.guild, f"⚠️ An error occured with the bot in {ctx.channel}. \n User: {ctx.author.mention} \n Error: {error} \n Please make sure that Milo has the necessary permissions. If it does, please let us know about the error by posting the error code in our [github](https://github.com/caydenworld/Milo/).")
         print(f"An error occured in a server {error}")
 
 @bot.command(name="addstaff", description="Adds a member to the staff role.", category="Moderation")
@@ -709,7 +714,7 @@ async def ai(ctx, *, user_input: str):
                     return
 
     # Send the AI response in the original channel
-    await ctx.send(response)
+    await ctx.send(f"{response}\n -# Milo ai can make mistakes. Check important info.")
 
 
 @bot.command(name="magic8ball", description="What will it answer?", category="Fun")
@@ -915,20 +920,49 @@ async def level(ctx):
     )
 
 
-# Event when a user sends a message
 @bot.event
 async def on_message(message):
     if message.author.bot:
         return
+    if message.author.bot or not message.guild:
+        return  # Ignore bots & DMs
 
-    # Give random XP between 10 and 20
+    guild_id = str(message.guild.id)
+    settings = load_settings()
+    bad_words = settings.get(guild_id, {}).get("bad_words", [])
+
+    for word in bad_words:
+        if word.lower() in message.content.lower():
+            await message.delete()
+            await message.channel.send(f"🚩 {message.author.mention}, this message has been flagged by Milo Automod. Think this is a mistake? Contact the server Admin to review their filter.")
+            return
+
+
     xp_earned = random.randint(10, 20)
 
-    # Update XP and level for the user
-    update_xp(str(message.author.id), xp_earned)
+    await update_xp(message, str(message.author.id), xp_earned)
 
-    await bot.process_commands(
-        message)  # Allows commands to work even with on_message
+    # Get the guild settings
+    settings = load_settings()
+    guild_id = str(message.guild.id)
+
+    # Check if custom commands are defined for this guild
+    if guild_id in settings and "custom_commands" in settings[guild_id]:
+        custom_commands = settings[guild_id]["custom_commands"]
+
+        # Check if the message content matches any custom command
+        if message.content in custom_commands:
+            response = custom_commands[message.content]
+
+            # Replace {user.mention} and {user.name} with actual user details
+            response = response.replace("{user.mention}", message.author.mention)
+            response = response.replace("{user.name}", message.author.name)
+
+            await message.channel.send(response)
+            return  # Stop here, don't process other commands after this
+
+    # Process regular commands (this is necessary to allow normal commands to work)
+    await bot.process_commands(message)
 
 
 @bot.command(name="daily", description="Get 500 gems every day.", category="Currency")
@@ -989,7 +1023,7 @@ async def addcommand(ctx, command_name: str, *, response: str):
         settings[guild_id]["custom_commands"] = {}
 
     # Add the new custom command to the guild's settings
-    settings[guild_id]["custom_commands"][command_name] = response
+    settings[guild_id]["custom_commands"][f";{command_name}"] = response
 
     # Save the settings back to the file
     save_settings(settings)
@@ -1015,34 +1049,7 @@ async def removecommand(ctx, command_name: str):
     else:
         await ctx.send(f"❌ Command `{command_name}` not found.")
 
-# Event to handle custom commands
-@bot.event
-async def on_message(message):
-    # Prevent the bot from responding to itself
-    if message.author == bot.user:
-        return
 
-    # Get the guild settings
-    settings = load_settings()
-    guild_id = str(message.guild.id)
-
-    # Check if custom commands are defined for this guild
-    if guild_id in settings and "custom_commands" in settings[guild_id]:
-        custom_commands = settings[guild_id]["custom_commands"]
-
-        # Check if the message content matches any custom command
-        if message.content in custom_commands:
-            response = custom_commands[message.content]
-
-            # Replace {user.mention} and {user.name} with actual user details
-            response = response.replace("{user.mention}", message.author.mention)
-            response = response.replace("{user.name}", message.author.name)
-
-            await message.channel.send(response)
-            return  # Stop here, don't process other commands after this
-
-    # Process regular commands (this is necessary to allow normal commands to work)
-    await bot.process_commands(message)
 
 
 def load_data():
@@ -1135,11 +1142,11 @@ async def report(ctx, member: discord.Member, *, reason="No reason provided"):
         log_channel = discord.utils.get(ctx.guild.text_channels, name="milo-mod-logs")
         if log_channel:
             await log_channel.send(
-                f"🚨 **Report Alert!** 🚨\n**Reporter:** {ctx.author.mention}\n**Accused:** {member.mention}\n**Reason:** {reason}")
+                f"🚨 **Report Alert!** 🚨\n<:purple_arrow:1340691455152361653>**Reporter:** {ctx.author.mention}\n<:purple_arrow:1340691455152361653>**Accused:** {member.mention}\n<:purple_arrow:1340691455152361653>**Reason:** {reason}")
     except Exception as e:
         await ctx.send(f"⚠️ Error: {e}")
 
-
+warnings={}
 # Warn Command
 @bot.command(name="Warn", description="Allows staff to warn a user.", category="Moderation")
 @commands.has_role("Staff")
@@ -1176,7 +1183,7 @@ async def poll(ctx, question, *options):
 @bot.command(name="butter", description="Summons the power of butter.", category="Fun")
 async def butter(ctx):
     await ctx.reply("Oh No! The Butter Flies!")
-    await ctx.reply(":butterfly:")
+    await ctx.reply("<:butterbutterfly:1338905847425663077>")
 
 help_commands = {
     "Moderation": {
@@ -1277,7 +1284,7 @@ def get_impact_font(size):
 # Meme command
 @bot.command(name="meme", description="Generates a meme with a given image and text.")
 async def meme(ctx, image_input: str, *, text: str):
-    async with ctx.thinking():
+    async with ctx.typing():
         try:
             # Use the URL directly if it's valid; otherwise, get an image from Pixabay
             image_url = image_input if is_url(image_input) else get_pixabay_image(image_input)
@@ -1322,23 +1329,7 @@ async def meme(ctx, image_input: str, *, text: str):
         except Exception as e:
             await ctx.send(f"Error: {e}")
 
-# 🚨 Message Filter: Deletes messages containing bad words
-@bot.event
-async def on_message(message):
-    if message.author.bot or not message.guild:
-        return  # Ignore bots & DMs
 
-    guild_id = str(message.guild.id)
-    settings = load_settings()
-    bad_words = settings.get(guild_id, {}).get("bad_words", [])
-
-    for word in bad_words:
-        if word.lower() in message.content.lower():
-            await message.delete()
-            await message.channel.send(f"{message.author.mention}, please avoid using that word!")
-            return
-
-    await bot.process_commands(message)  # Ensure commands still work
 
 # ✅ Command: Add a bad word
 @bot.command(name="addbadword", description="Add a word to the filter (Admins only)")
@@ -1386,6 +1377,162 @@ async def listbadwords(ctx):
         await ctx.send("Filtered words: " + ", ".join(bad_words))
 
 
+SERVER_LIST_FILE = "server_list.json"
+BAD_WORDS = ["milo", "official", "scam", "scamming"]
 
-# Run the bot
+
+def load_servers():
+    """Loads the servers from the JSON file."""
+    if not os.path.exists(SERVER_LIST_FILE):
+        return {}
+    with open(SERVER_LIST_FILE, "r", encoding="utf-8") as file:
+        return json.load(file)
+
+
+def save_servers(servers):
+    """Saves the servers data to the JSON file."""
+    with open(SERVER_LIST_FILE, "w", encoding="utf-8") as file:
+        json.dump(servers, file, indent=4)
+
+
+def is_valid_server_name(server_name):
+    """Checks if the server name contains any bad words."""
+    for bad_word in BAD_WORDS:
+        if bad_word.lower() in server_name.lower():
+            return False
+    return True
+
+
+class ServerDropdown(Select):
+    """Dropdown for selecting a server."""
+    def __init__(self, servers, bot):
+        options = []
+        for name, data in servers.items():
+            # Add the verified emoji to the dropdown if the server is verified
+            verified_emoji = None
+            if data.get("verified"):
+                # Ensure correct emoji formatting for the bot's custom emoji
+                verified_emoji = discord.PartialEmoji(name="Verified", id="1340697696960380978")
+
+            options.append(discord.SelectOption(
+                label=data['server_name'],
+                value=name,
+                emoji=verified_emoji  # Add the emoji here
+            ))
+
+        super().__init__(placeholder="Select a server to join", options=options)
+        self.servers = servers
+        self.bot = bot
+
+    async def callback(self, interaction: discord.Interaction):
+        server_name = self.values[0]
+        server_data = self.servers.get(server_name, {})
+
+        invite = server_data.get("invite", "")
+        if invite:
+            button = Button(label="Click to Join", url=invite)
+
+            # Create a view with the button
+            view = View()
+            view.add_item(button)
+
+            # Send the message with the button inside a view
+            await interaction.response.send_message(
+                f"🌍 Click to join `{server_name}`:",
+                ephemeral=True,
+                view=view
+            )
+        else:
+            await interaction.response.send_message(
+                "❌ There was an issue with the server's invite link.",
+                ephemeral=True)
+
+class VerifyDropdown(Select):
+    """Dropdown for selecting servers to verify."""
+
+    def __init__(self, servers):
+        options = [
+            discord.SelectOption(label=servers[name]["server_name"], value=name)
+            for name, data in servers.items() if not data.get("verified")
+        ]
+        super().__init__(placeholder="Select a server to verify", options=options)
+        self.servers = servers
+
+    async def callback(self, interaction: discord.Interaction):
+        server_name = self.values[0]
+        server_data = self.servers.get(server_name, {})
+
+        # Mark the server as verified
+        server_data["verified"] = True
+        save_servers(self.servers)
+
+        await interaction.response.send_message(
+            f"<:Verified:1340697696960380978> Server `{server_name}` has been verified!", ephemeral=True
+        )
+
+
+@bot.command(name="register", description="Registers your server on the server list")
+@commands.has_permissions(administrator=True)
+async def register(ctx, server_name):
+    """Registers a server with a name and invite link, and checks for bad words."""
+    if not is_valid_server_name(server_name):
+        await ctx.send(
+            "❌ The server name contains restricted words (e.g., Milo, official, scam). Please choose another name. Think this is a mistake? File a patch in our [github](https://github.com/caydenworld/Milo/)")
+        return
+
+    servers = load_servers()
+
+    # Check if the guild already has a registered server
+    if str(ctx.guild.id) in servers:
+        await ctx.send("❌ This server already has a registered listing.")
+        return
+
+    # Generate an invite link
+    invite = await ctx.channel.create_invite(max_uses=0, unique=True)
+
+    # Save the server data along with the guild ID
+    servers[str(ctx.guild.id)] = {
+        "server_name": server_name,
+        "invite": str(invite),
+        "verified": False,  # By default, the server is not verified
+        "guild_id": ctx.guild.id  # Store guild ID
+    }
+
+    save_servers(servers)
+
+    await ctx.send(f"✅ `{server_name}` has been added to the Milo server list!")
+
+
+@bot.command(name="servers", description="Shows available servers to join")
+async def servers(ctx):
+    servers = load_servers()
+
+    if not servers:
+        await ctx.send("❌ No servers have been registered yet.")
+        return
+
+    view = View()
+    dropdown = ServerDropdown(servers, ctx.bot)
+    view.add_item(dropdown)
+
+    # Send the message with the dropdown and view
+    await ctx.send("📜 **Milo Server List:**", view=view)
+
+
+@bot.command(name="verify", description="Verifies a server as trusted (Admin only)")
+@commands.is_owner()  # Ensure only the bot owner can use this command
+async def verify(ctx):
+    """Shows a dropdown for selecting servers that can be verified."""
+    servers = load_servers()
+
+    if not any(not data.get("verified") for data in servers.values()):
+        await ctx.send("❌ No unverified servers available.")
+        return
+
+    view = View()
+    dropdown = VerifyDropdown(servers)
+    view.add_item(dropdown)
+
+    # Send the message with the dropdown to verify
+    await ctx.send("🔒 **Select a server to verify:**", view=view)
 bot.run(os.getenv('DISCORD_TOKEN'))
