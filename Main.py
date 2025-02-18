@@ -19,6 +19,7 @@ import yt_dlp as youtube_dl
 import asyncio
 import ffmpeg
 
+
 load_dotenv()
 
 # Files for storage
@@ -1039,8 +1040,6 @@ async def on_message(message):
             await message.channel.send(response)
             return  # Stop here, don't process other commands after this
 
-    # Process regular commands (this is necessary to allow normal commands to work)
-    await bot.process_commands(message)
 
 
 @bot.command(name="daily", description="Get 500 gems every day.", category="Currency")
@@ -1085,52 +1084,6 @@ async def daily(ctx):
         f"💎 {ctx.author.mention}, You earned **500 gems** 💎! Come back in 24 hours for another 500."
     )
 
-@bot.slash_command(name="addcommand", description="Allows staff to add a custom command.", category="Moderation")
-@commands.has_role("Staff")
-async def give(
-    ctx: discord.ApplicationContext,
-    command_name: str,  # Required parameter (comes first)
-    response: str  # Required parameter
-):
-    """Adds a custom command to the server."""
-    settings = load_settings()
-    guild_id = str(ctx.guild.id)
-
-    # Ensure the guild has an entry in the settings file
-    if guild_id not in settings:
-        settings[guild_id] = {}
-
-    # Create a "custom_commands" section for this server
-    if "custom_commands" not in settings[guild_id]:
-        settings[guild_id]["custom_commands"] = {}
-
-    # Add the new custom command to the guild's settings
-    settings[guild_id]["custom_commands"][f";{command_name}"] = response
-
-    # Save the settings back to the file
-    save_settings(settings)
-
-    await ctx.respond(f"✅ Custom command `{command_name}` added successfully!")
-
-# Command to remove a custom command
-@bot.command(name="removecommand", description="Allows staff to remove a custom command.", category="Moderation")
-@commands.has_role("Staff")
-async def removecommand(ctx, command_name: str):
-    """Removes a custom command from the server."""
-    settings = load_settings()
-    guild_id = str(ctx.guild.id)
-
-    if guild_id not in settings or "custom_commands" not in settings[guild_id]:
-        await ctx.respond("❌ No custom commands have been set yet.")
-        return
-
-    if command_name in settings[guild_id]["custom_commands"]:
-        del settings[guild_id]["custom_commands"][command_name]
-        save_settings(settings)
-        await ctx.respond(f"✅ Custom command `{command_name}` removed successfully!")
-    else:
-        await ctx.respond(f"❌ Command `{command_name}` not found.")
-
 
 
 
@@ -1142,8 +1095,8 @@ def load_data():
         return {}
 
 # Save data function
-def save_data(data):
-    with open("mod_data.json", "w") as f:
+def save_data(file, data):
+    with open(file, "w") as f:
         json.dump(data, f, indent=4)
 
 
@@ -1273,10 +1226,7 @@ help_commands = {
         "ban": {"emoji": "🔨", "description": "Bans a user from the server.", "usage": "/ban @user [reason]"},
         "kick": {"emoji": "👢", "description": "Kicks a user from the server.", "usage": "/kick @user [reason]"},
         "warn": {"emoji": "⚠️", "description": "Warns a user and logs it.", "usage": "/warn @user [reason]"},
-        "report": {"emoji": "📩", "description": "Reports a user to staff.", "usage": "/report @user [reason]"},
-        "addcommand": {"emoji": "🛠️", "description": "Allows staff to add a custom command.", "usage": "/addcommand [command_name] [response]"},
-        "removecommand": {"emoji": "❌", "description": "Allows staff to remove a custom command.", "usage": "/removecommand [command_name]"},
-    },
+        "report": {"emoji": "📩", "description": "Reports a user to staff.", "usage": "/report @user [reason]"},},
     "Utility": {
         "help": {"emoji": "❓", "description": "Shows this help menu.", "usage": "/help [command]"},
         "openpostcard": {"emoji": "🌍", "description": "Opens your postcards.", "usage": "/openpostcard"},
@@ -2206,77 +2156,108 @@ async def check_birthdays():
             channel = discord.utils.get(bot.get_all_channels(), name="general")  # Change if needed
             if channel:
                 await channel.send(f"🎂 Happy Birthday {user.mention}! 🎉🥳")
+@bot.slash_command(name='hello', description='Say hello!')
+async def hello(ctx):
+    if isinstance(ctx.channel, discord.DMChannel):
+        await ctx.respond("Hello! This is a DM.")
+    else:
+        await ctx.respond("Hello! This is a server.")
 
 
-class GiveawayView(discord.ui.View):
-    def __init__(self, duration_seconds, prize):
-        super().__init__(timeout=duration_seconds)  # Timeout matches duration
-        self.prize = prize
-        self.entries = []
-        self.message = None  # Store the giveaway message
+# Path to your project folder where the images are stored
+TEAM_IMAGES_DIR = "Team Images"
 
-    async def start(self, ctx):
-        """Send the giveaway message and store it for later reference."""
-        embed = discord.Embed(
-            title="🎉 GIVEAWAY 🎉",
-            description=f"Prize: **{self.prize}**\nClick the button below to enter!\nDuration: {self.format_duration(self.timeout)}",
-            color=discord.Color.gold(),
-        )
-        self.message = await ctx.respond(embed=embed, view=self)
-        await asyncio.sleep(self.timeout)  # Wait for giveaway duration
-        await self.end_giveaway(ctx)
-
-    @discord.ui.button(label="Enter Giveaway 🎉", style=discord.ButtonStyle.green)
-    async def enter_giveaway(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """Handles user entries when they click the button."""
-        if interaction.user.id not in self.entries:
-            self.entries.append(interaction.user.id)
-            await interaction.response.send_message(f"✅ {interaction.user.mention}, you have entered the giveaway!",
-                                                    ephemeral=True)
-        else:
-            await interaction.response.send_message("⚠️ You are already entered!", ephemeral=True)
-
-    async def end_giveaway(self, ctx):
-        """Announces the winner when the giveaway ends."""
-        if self.entries:
-            winner_id = random.choice(self.entries)
-            winner = await ctx.bot.fetch_user(winner_id)
-            await ctx.respond(f"🎉 **Giveaway Ended!** Congratulations {winner.mention}! You won **{self.prize}**! 🎁")
-        else:
-            await ctx.respond("😢 No one entered the giveaway.")
-
-    def format_duration(self, seconds):
-        """Convert seconds into a readable format like '1h 30m'."""
-        time_units = [("y", 31536000), ("mo", 2592000), ("w", 604800), ("d", 86400), ("h", 3600), ("m", 60), ("s", 1)]
-        result = []
-        for unit, unit_seconds in time_units:
-            if seconds >= unit_seconds:
-                value, seconds = divmod(seconds, unit_seconds)
-                result.append(f"{value}{unit}")
-        return " ".join(result) if result else "0s"
+# Sample team data (name, role, and image filename)
+team_members = [
+    {"name": "Tgum", "role": "Developer", "image_file": "Tgum.png"},
+    {"name": "Kodumaster", "role": "Developer", "image_file": "Kodumaster.jpeg"},
+    {"name": "Caydenworld", "role": "Developer", "image_file": "Cayden.png"},
+    {"name": "ChatGPT", "role": "Develepor", "image_file": "Chatgpt.png"},
+    {"name": "Contributors", "role": "Contributors", "image_file": "Milo.png"}
+]
 
 
-@bot.command()
-@commands.has_role("Staff")
-async def giveaway(ctx, duration: str, *, prize: str):
-    """Start a giveaway with a button (Admin only)"""
-    duration_seconds = parse_duration(duration)  # Convert time input into seconds
-    if duration_seconds is None:
-        await ctx.respond("❌ Invalid duration format! Use `1s, 1m, 1h, 1d, 1w, 1mo, 1y`.")
+@bot.command(name="team", description="Displays the team members in separate posts.")
+async def team(ctx):
+    # Send the first message introducing the team
+    await ctx.respond("**OUR TEAM**\nMeet the amazing people behind Milo!")
+
+    # Loop through team members and send a message for each one
+    for member in team_members:
+        image_path = os.path.join(TEAM_IMAGES_DIR, member["image_file"])
+
+        if os.path.exists(image_path):
+            file = discord.File(image_path, filename=member["image_file"])
+
+            # Create a message for each team member
+            embed = discord.Embed(
+                title=f"{member['name']} - {member['role']}",
+                description=f"**{member['name']}** is an amazing {member['role']}.",
+                color=discord.Color.blurple()
+            )
+            embed.set_image(url=f"attachment://{member['image_file']}")  # Set image inline with the message
+
+            # Send the embed with the image attached
+            await ctx.send(embed=embed, file=file)
+
+
+@bot.command(name="quiz", description="Start a quiz using Open Trivia API")
+async def quiz(ctx):
+    # Fetch a random quiz question from the Open Trivia Database API
+    response = requests.get('https://opentdb.com/api.php?amount=1&type=multiple')
+
+    if response.status_code != 200:
+        await ctx.send("❌ Failed to fetch quiz questions. Please try again later.")
         return
 
-    view = GiveawayView(duration_seconds, prize)  # Pass the correct variable
-    await view.start(ctx)
+    data = response.json()
+    question_data = data['results'][0]
 
+    # Get the question and choices
+    question = question_data['question']
+    correct_answer = question_data['correct_answer']
+    incorrect_answers = question_data['incorrect_answers']
 
-def parse_duration(duration: str):
-    """Converts duration string (e.g., 1h, 2d) into seconds."""
-    time_units = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800, "mo": 2592000, "y": 31536000}
+    # Shuffle the answers (correct + incorrect answers)
+    answers = incorrect_answers + [correct_answer]
+    random.shuffle(answers)
+
+    # Create an embed to send the question and answers
+    embed = discord.Embed(
+        title="Quiz Time! 🧠",
+        description=question,
+        color=discord.Color.blurple()
+    )
+
+    # Add the answer choices as field items
+    for i, answer in enumerate(answers, 1):
+        embed.add_field(name=f"Option {i}", value=answer, inline=False)
+
+    # Send the question embed
+    question_message = await ctx.send(embed=embed)
+
+    # Add reactions for answering the quiz
+    for i in range(1, len(answers) + 1):
+        await question_message.add_reaction(f"{chr(127462 + i)}")  # React with emojis: A, B, C, D
+
+    # Wait for the user's answer
+    def check(reaction, user):
+        return user != bot.user and str(reaction.emoji) in ['🇦', '🇧', '🇨', '🇩']
+
     try:
-        unit = duration[-1]
-        if unit in time_units:
-            return int(duration[:-1]) * time_units[unit]
-    except ValueError:
-        return None
+        reaction, user = await bot.wait_for("reaction_add", timeout=30.0, check=check)
+
+        # Determine the selected answer
+        chosen_answer = answers[ord(str(reaction.emoji)) - 127462]
+
+        # Check if the chosen answer is correct
+        if chosen_answer == correct_answer:
+            await ctx.send(f"✅ Correct! The answer was: {correct_answer}")
+        else:
+            await ctx.send(f"❌ Incorrect. The correct answer was: {correct_answer}")
+
+    except asyncio.TimeoutError:
+        await ctx.send("⏰ Time's up! No answer was provided.")
+
 
 bot.run(os.getenv('DISCORD_TOKEN'))
