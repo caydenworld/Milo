@@ -18,6 +18,9 @@ from discord.utils import get
 import yt_dlp as youtube_dl
 import asyncio
 import ffmpeg
+import html
+import platform
+import psutil
 
 
 load_dotenv()
@@ -1633,8 +1636,9 @@ class MusicControlView(discord.ui.View):
         self.ctx.voice_client.stop()
         await self.ctx.voice_client.disconnect()
 
-@bot.command(name='play', help='Plays music in a selected voice channel')
+@bot.command(name='play', description='Plays music in a selected voice channel')
 async def play(ctx, *, search: str):
+    await ctx.defer()
     if ctx.voice_client is None:
         view = DropdownView(channels=ctx.guild.voice_channels)
         await ctx.respond("Select a voice channel to join:", view=view)
@@ -1661,10 +1665,11 @@ async def play(ctx, *, search: str):
 
     await ctx.respond(f'Now playing: {player.title}', view=MusicControlView(ctx))
 
-@bot.command(name='stop', help='Stops the music and leaves the voice channel')
+@bot.command(name='stop', description='Stops the music and leaves the voice channel')
 async def stop(ctx):
     if ctx.voice_client:
         await ctx.voice_client.disconnect()
+        await ctx.respond("Stopped the music.")
 
 @play.before_invoke
 @stop.before_invoke
@@ -2201,63 +2206,175 @@ async def team(ctx):
             await ctx.send(embed=embed, file=file)
 
 
-@bot.command(name="quiz", description="Start a quiz using Open Trivia API")
+@bot.command(name="quiz", description="Starts a quiz with questions from an API.")
 async def quiz(ctx):
-    # Fetch a random quiz question from the Open Trivia Database API
-    response = requests.get('https://opentdb.com/api.php?amount=1&type=multiple')
-
-    if response.status_code != 200:
-        await ctx.send("❌ Failed to fetch quiz questions. Please try again later.")
-        return
-
+    # Fetch quiz question from the API
+    url = "https://opentdb.com/api.php?amount=1&type=multiple"
+    response = requests.get(url)
     data = response.json()
-    question_data = data['results'][0]
 
-    # Get the question and choices
-    question = question_data['question']
-    correct_answer = question_data['correct_answer']
-    incorrect_answers = question_data['incorrect_answers']
+    # Extract question and answers from the API response
+    question = html.unescape(data['results'][0]['question'])  # Decode HTML entities in the question
+    correct_answer = html.unescape(data['results'][0]['correct_answer'])  # Decode the correct answer
+    options = data['results'][0]['incorrect_answers']
 
-    # Shuffle the answers (correct + incorrect answers)
-    answers = incorrect_answers + [correct_answer]
-    random.shuffle(answers)
+    # Decode incorrect answers
+    options = [html.unescape(option) for option in options]
+    options.append(correct_answer)  # Add the correct answer to the options list
+    random.shuffle(options)  # Shuffle the options to randomize their order
 
-    # Create an embed to send the question and answers
+    # Create an embed with the question and options
     embed = discord.Embed(
-        title="Quiz Time! 🧠",
-        description=question,
-        color=discord.Color.blurple()
+        title="Quiz Time!",
+        description=f"**Question:** {question}\n\n"
+                    f"1️⃣ {options[0]}\n"
+                    f"2️⃣ {options[1]}\n"
+                    f"3️⃣ {options[2]}\n"
+                    f"4️⃣ {options[3]}",
+        color=discord.Color.blue()
     )
 
-    # Add the answer choices as field items
-    for i, answer in enumerate(answers, 1):
-        embed.add_field(name=f"Option {i}", value=answer, inline=False)
+    # Send the message with the options
+    message = await ctx.send(embed=embed)
 
-    # Send the question embed
-    question_message = await ctx.send(embed=embed)
+    # Add reactions for users to react to
+    await message.add_reaction("1️⃣")
+    await message.add_reaction("2️⃣")
+    await message.add_reaction("3️⃣")
+    await message.add_reaction("4️⃣")
 
-    # Add reactions for answering the quiz
-    for i in range(1, len(answers) + 1):
-        await question_message.add_reaction(f"{chr(127462 + i)}")  # React with emojis: A, B, C, D
-
-    # Wait for the user's answer
+    # Wait for the reactions and check the answers
     def check(reaction, user):
-        return user != bot.user and str(reaction.emoji) in ['🇦', '🇧', '🇨', '🇩']
+        return user != bot.user and str(reaction.emoji) in ["1️⃣", "2️⃣", "3️⃣", "4️⃣"] and reaction.message.id == message.id
 
     try:
-        reaction, user = await bot.wait_for("reaction_add", timeout=30.0, check=check)
+        # Wait for a reaction
+        reaction, user = await bot.wait_for('reaction_add', check=check, timeout=30.0)
 
-        # Determine the selected answer
-        chosen_answer = answers[ord(str(reaction.emoji)) - 127462]
+        # Get the selected option from the reaction
+        if str(reaction.emoji) == "1️⃣":
+            selected_answer = options[0]
+        elif str(reaction.emoji) == "2️⃣":
+            selected_answer = options[1]
+        elif str(reaction.emoji) == "3️⃣":
+            selected_answer = options[2]
+        elif str(reaction.emoji) == "4️⃣":
+            selected_answer = options[3]
 
-        # Check if the chosen answer is correct
-        if chosen_answer == correct_answer:
-            await ctx.send(f"✅ Correct! The answer was: {correct_answer}")
+        # Check if the answer is correct
+        if selected_answer == correct_answer:
+            await message.channel.send(f"✅ {user.mention}, Correct! The answer is: {correct_answer}")
         else:
-            await ctx.send(f"❌ Incorrect. The correct answer was: {correct_answer}")
+            await message.channel.send(f"❌ {user.mention}, Incorrect! The correct answer is: {correct_answer}")
 
     except asyncio.TimeoutError:
-        await ctx.send("⏰ Time's up! No answer was provided.")
+        await message.channel.send("⏳ Time's up! No one answered in time.")
 
+
+@bot.command(name="profile", description="View a your profile!")
+async def profile(ctx):
+    # Pulling information directly from Discord
+    user = ctx.author
+
+    embed = discord.Embed(title=f"{user.name}'s Profile", color=discord.Color.blue())
+
+    # Add fields from the user's information
+    embed.add_field(name="Username", value=f"{user.name}#{user.discriminator}", inline=False)
+    embed.add_field(name="Joined Server", value=user.joined_at.strftime("%B %d, %Y"), inline=False)
+    embed.add_field(name="Account Created", value=user.created_at.strftime("%B %d, %Y"), inline=False)
+    embed.add_field(name="Roles", value=", ".join([role.name for role in user.roles if role.name != "@everyone"]),
+                    inline=False)
+    embed.set_thumbnail(url=user.avatar.url)
+
+    # Send the embed to the user
+    await (ctx.respond(embed=embed, ephemeral=True))
+
+
+# Command to view another user's profile
+@bot.command(name="userprofile", description="View a user´s profile.")
+async def user_profile(ctx, user: discord.User):
+    embed = discord.Embed(title=f"{user.name}'s Profile", color=discord.Color.blue())
+
+    # Add fields from the user's information
+    embed.add_field(name="Username", value=f"{user.name}#{user.discriminator}", inline=False)
+    embed.add_field(name="Joined Server", value=user.joined_at.strftime("%B %d, %Y"), inline=False)
+    embed.add_field(name="Account Created", value=user.created_at.strftime("%B %d, %Y"), inline=False)
+    embed.add_field(name="Roles", value=", ".join([role.name for role in user.roles if role.name != "@everyone"]),
+                    inline=False)
+    embed.set_thumbnail(url=user.avatar.url)
+
+    # Send the embed to the user
+    await ctx.respond(embed=embed, ephemeral=True)
+
+
+@bot.command(name="debug", description="Sends a debug report")
+async def debug(ctx):
+    """Send an ephemeral debug message with system info."""
+    # Get latency
+    latency = round(ctx.bot.latency * 1000)
+
+    # Get CPU and memory usage
+    cpu_percent = psutil.cpu_percent(interval=1)
+    memory_info = psutil.virtual_memory()
+    memory_used = round(memory_info.used / (1024 * 1024), 1)
+    memory_total = round(memory_info.total / (1024 * 1024 * 1024), 1)
+
+    # Embed creation
+    embed = discord.Embed(title="Debug", color=discord.Color.blue())
+    embed.add_field(name="Ping", value=f"{latency}ms", inline=False)
+    embed.add_field(name="Integration Type", value="User", inline=False)
+    embed.add_field(name="Context", value="Guild", inline=False)
+    embed.add_field(name="Shard ID", value=f"{ctx.guild.shard_id}", inline=False)
+    embed.add_field(name="Guild ID", value=f"{ctx.guild.id}", inline=False)
+    embed.add_field(name="Channel ID", value=f"{ctx.channel.id}", inline=False)
+    embed.add_field(name="Author ID", value=f"{ctx.author.id}", inline=False)
+    embed.add_field(name="Version", value="2e47647 (2025/01/05)", inline=False)
+    embed.add_field(name="Translation Version", value="fd46bcf (2024/12/28)", inline=False)
+    embed.add_field(name="CPU", value=f"{cpu_percent}%", inline=False)
+    embed.add_field(name="Memory", value=f"{memory_used} MB Used / {memory_total} GB", inline=False)
+
+    # Add a footer with the current date and time
+    embed.set_footer(text=f"Timestamp: {datetime.datetime.now(datetime.UTC).strftime('%Y-%m-%d %H:%M:%S')} UTC")
+
+    await ctx.respond(embed=embed, ephemeral=True)
 
 bot.run(os.getenv('DISCORD_TOKEN'))
+
+
+#
+#
+#                                                                                                                                                                                                                                                                          dddddddd                                                                                                                          dddddddd
+#YYYYYYY       YYYYYYY                                     hhhhhhh                                                                                                                                                     hhhhhhh                                             d::::::d              tttt         hhhhhhh                                                                                        d::::::d
+#Y:::::Y       Y:::::Y                                     h:::::h                                                                                                                                                     h:::::h                                             d::::::d           ttt:::t         h:::::h                                                                                        d::::::d
+#Y:::::Y       Y:::::Y                                     h:::::h                                                                                                                                                     h:::::h                                             d::::::d           t:::::t         h:::::h                                                                                        d::::::d
+#Y::::::Y     Y::::::Y                                     h:::::h                                                                                                                                                     h:::::h                                             d:::::d            t:::::t         h:::::h                                                                                        d:::::d
+#YYY:::::Y   Y:::::YYYooooooooooo   uuuuuu    uuuuuu        h::::h hhhhh         aaaaaaaaaaaaavvvvvvv           vvvvvvv eeeeeeeeeeee         rrrrr   rrrrrrrrr       eeeeeeeeeeee    aaaaaaaaaaaaa      cccccccccccccccch::::h hhhhh           eeeeeeeeeeee        ddddddddd:::::d      ttttttt:::::ttttttt    h::::h hhhhh           eeeeeeeeeeee             eeeeeeeeeeee    nnnn  nnnnnnnn        ddddddddd:::::d
+#   Y:::::Y Y:::::Y oo:::::::::::oo u::::u    u::::u        h::::hh:::::hhh      a::::::::::::av:::::v         v:::::vee::::::::::::ee       r::::rrr:::::::::r    ee::::::::::::ee  a::::::::::::a   cc:::::::::::::::ch::::hh:::::hhh      ee::::::::::::ee    dd::::::::::::::d      t:::::::::::::::::t    h::::hh:::::hhh      ee::::::::::::ee         ee::::::::::::ee  n:::nn::::::::nn    dd::::::::::::::d
+#    Y:::::Y:::::Y o:::::::::::::::ou::::u    u::::u        h::::::::::::::hh    aaaaaaaaa:::::av:::::v       v:::::ve::::::eeeee:::::ee     r:::::::::::::::::r  e::::::eeeee:::::eeaaaaaaaaa:::::a c:::::::::::::::::ch::::::::::::::hh   e::::::eeeee:::::ee d::::::::::::::::d      t:::::::::::::::::t    h::::::::::::::hh   e::::::eeeee:::::ee      e::::::eeeee:::::een::::::::::::::nn  d::::::::::::::::d
+#     Y:::::::::Y  o:::::ooooo:::::ou::::u    u::::u        h:::::::hhh::::::h            a::::a v:::::v     v:::::ve::::::e     e:::::e     rr::::::rrrrr::::::re::::::e     e:::::e         a::::ac:::::::cccccc:::::ch:::::::hhh::::::h e::::::e     e:::::ed:::::::ddddd:::::d      tttttt:::::::tttttt    h:::::::hhh::::::h e::::::e     e:::::e     e::::::e     e:::::enn:::::::::::::::nd:::::::ddddd:::::d
+#      Y:::::::Y   o::::o     o::::ou::::u    u::::u        h::::::h   h::::::h    aaaaaaa:::::a  v:::::v   v:::::v e:::::::eeeee::::::e      r:::::r     r:::::re:::::::eeeee::::::e  aaaaaaa:::::ac::::::c     ccccccch::::::h   h::::::he:::::::eeeee::::::ed::::::d    d:::::d            t:::::t          h::::::h   h::::::he:::::::eeeee::::::e     e:::::::eeeee::::::e  n:::::nnnn:::::nd::::::d    d:::::d
+#       Y:::::Y    o::::o     o::::ou::::u    u::::u        h:::::h     h:::::h  aa::::::::::::a   v:::::v v:::::v  e:::::::::::::::::e       r:::::r     rrrrrrre:::::::::::::::::e aa::::::::::::ac:::::c             h:::::h     h:::::he:::::::::::::::::e d:::::d     d:::::d            t:::::t          h:::::h     h:::::he:::::::::::::::::e      e:::::::::::::::::e   n::::n    n::::nd:::::d     d:::::d
+#       Y:::::Y    o::::o     o::::ou::::u    u::::u        h:::::h     h:::::h a::::aaaa::::::a    v:::::v:::::v   e::::::eeeeeeeeeee        r:::::r            e::::::eeeeeeeeeee a::::aaaa::::::ac:::::c             h:::::h     h:::::he::::::eeeeeeeeeee  d:::::d     d:::::d            t:::::t          h:::::h     h:::::he::::::eeeeeeeeeee       e::::::eeeeeeeeeee    n::::n    n::::nd:::::d     d:::::d
+#       Y:::::Y    o::::o     o::::ou:::::uuuu:::::u        h:::::h     h:::::ha::::a    a:::::a     v:::::::::v    e:::::::e                 r:::::r            e:::::::e         a::::a    a:::::ac::::::c     ccccccch:::::h     h:::::he:::::::e           d:::::d     d:::::d            t:::::t    tttttth:::::h     h:::::he:::::::e                e:::::::e             n::::n    n::::nd:::::d     d:::::d
+#       Y:::::Y    o:::::ooooo:::::ou:::::::::::::::uu      h:::::h     h:::::ha::::a    a:::::a      v:::::::v     e::::::::e                r:::::r            e::::::::e        a::::a    a:::::ac:::::::cccccc:::::ch:::::h     h:::::he::::::::e          d::::::ddddd::::::dd           t::::::tttt:::::th:::::h     h:::::he::::::::e               e::::::::e            n::::n    n::::nd::::::ddddd::::::dd
+#    YYYY:::::YYYY o:::::::::::::::o u:::::::::::::::u      h:::::h     h:::::ha:::::aaaa::::::a       v:::::v       e::::::::eeeeeeee        r:::::r             e::::::::eeeeeeeea:::::aaaa::::::a c:::::::::::::::::ch:::::h     h:::::h e::::::::eeeeeeee   d:::::::::::::::::d           tt::::::::::::::th:::::h     h:::::h e::::::::eeeeeeee        e::::::::eeeeeeee    n::::n    n::::n d:::::::::::::::::d
+#    Y:::::::::::Y  oo:::::::::::oo   uu::::::::uu:::u      h:::::h     h:::::h a::::::::::aa:::a       v:::v         ee:::::::::::::e        r:::::r              ee:::::::::::::e a::::::::::aa:::a cc:::::::::::::::ch:::::h     h:::::h  ee:::::::::::::e    d:::::::::ddd::::d             tt:::::::::::tth:::::h     h:::::h  ee:::::::::::::e         ee:::::::::::::e    n::::n    n::::n  d:::::::::ddd::::d
+#    YYYYYYYYYYYYY    ooooooooooo       uuuuuuuu  uuuu      hhhhhhh     hhhhhhh  aaaaaaaaaa  aaaa        vvv            eeeeeeeeeeeeee        rrrrrrr                eeeeeeeeeeeeee  aaaaaaaaaa  aaaa   cccccccccccccccchhhhhhh     hhhhhhh    eeeeeeeeeeeeee     ddddddddd   ddddd               ttttttttttt  hhhhhhh     hhhhhhh    eeeeeeeeeeeeee           eeeeeeeeeeeeee    nnnnnn    nnnnnn   ddddddddd   ddddd
+
+
+
+#        ##
+#       ##
+#        ##
+#       _|=|__________
+#      /              \
+#     /                \
+#    /__________________\
+#     ||  || /--\ ||  ||
+#     ||[]|| | .| ||[]||
+#   ()||__||_|__|_||__||()
+#  ( )|-|-|-|====|-|-|-|( )
+#  ^^^^^^^^^^====^^^^^^^^^^^
+
+#House of the Bug Lord
+
