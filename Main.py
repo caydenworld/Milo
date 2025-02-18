@@ -33,7 +33,7 @@ intents.members = True
 
 
 # Initialize bot
-bot = commands.Bot(command_prefix=';', intents=intents, help_command=None)
+bot = discord.Bot(intents=intents)
 
 SETTINGS_FILE = "Settings.json"
 # Load inventory from JSON
@@ -514,22 +514,22 @@ async def on_raw_reaction_add(payload):
 @bot.event
 async def on_command_error(ctx, error):
     if isinstance(error, commands.MissingRole):
-        await ctx.send("🚫 You need the 'Staff' role to use this command.")
+        await ctx.respond("🚫 You need the 'Staff' role to use this command.")
 
     elif isinstance(error, commands.MissingPermissions):
-        await ctx.send("⛔ You don't have permission to use this command.")
+        await ctx.respond("⛔ You don't have permission to use this command.")
 
     elif isinstance(error, commands.CommandNotFound):
-        await ctx.send("❓ Command not found. Please check `!help` for available commands.")
+        await ctx.respond("❓ Command not found. Please check `!help` for available commands.")
 
     elif isinstance(error, commands.MissingRequiredArgument):
-        await ctx.send(f"⚠️ Missing argument: `{error.param.name}`. Please provide all required inputs.")
+        await ctx.respond(f"⚠️ Missing argument: `{error.param.name}`. Please provide all required inputs.")
 
     elif isinstance(error, commands.BadArgument):
-        await ctx.send("⚠️ Invalid input. Please check your arguments and try again.")
+        await ctx.respond("⚠️ Invalid input. Please check your arguments and try again.")
 
     else:
-        await ctx.send(
+        await ctx.respond(
             f"❌ An error occurred while processing your request. **Error code:** `{error}`. If the issue persists, contact the server admin.")
 
         await send_dm_to_staff(
@@ -558,9 +558,9 @@ async def addstaff(ctx, member: discord.Member):
 
         # Add the 'Staff' role to the member
         await member.add_roles(staff_role)
-        await ctx.send(f"{member.mention} has been added to the staff role.")
+        await ctx.respond(f"{member.mention} has been added to the staff role.")
     else:
-        await ctx.send("You need to be the server owner or have the 'Staff' role to use this command.")
+        await ctx.respond("You need to be the server owner or have the 'Staff' role to use this command.")
 
 
 @bot.command(name="closeticket", description="Closes a support ticket.", category="Utilities")
@@ -571,14 +571,14 @@ async def closeticket(ctx):
     # Check if the command is being used in a ticket channel
     if ctx.channel.name.startswith("ticket-"):
         # Send a confirmation message before deletion
-        await ctx.send("Closing this ticket...")
+        await ctx.respond("Closing this ticket...")
 
         # Optionally, you could archive the content of the ticket before deletion, e.g., by logging it in another channel
 
         # Delete the ticket channel
         await ctx.channel.delete()
     else:
-        await ctx.send("This command can only be used in a ticket channel.")
+        await ctx.respond("This command can only be used in a ticket channel.")
 
 @bot.command(name="ticket", description="Opens a support ticket.", category="Utilities")
 async def ticket(ctx):
@@ -593,7 +593,7 @@ async def ticket(ctx):
     # Check if a ticket already exists for the user
     existing_channel = discord.utils.get(guild.text_channels, name=ticket_name)
     if existing_channel:
-        await ctx.send(f"You already have a ticket open: {existing_channel.mention}")
+        await ctx.respond(f"You already have a ticket open: {existing_channel.mention}")
         return
 
     # Set up channel permissions
@@ -614,7 +614,7 @@ async def ticket(ctx):
         await ticket_channel.send(f"Hey {staff_role.mention}, a new ticket has been created by {ctx.author.mention}.")
 
     # Send a message in the original channel notifying the user
-    await ctx.send(f"Your ticket has been created! {ticket_channel.mention}")
+    await ctx.respond(f"Your ticket has been created! {ticket_channel.mention}")
 
 
 @bot.command(name="rr", description="Create a reaction role.", category="Utilities")
@@ -630,15 +630,15 @@ async def rr(ctx, message_id: int, emoji: str, *, role: discord.Role):
     try:
         message = await ctx.fetch_message(message_id)
     except discord.NotFound:
-        await ctx.send(f"❌ Could not find message with ID {message_id}.")
+        await ctx.respond(f"❌ Could not find message with ID {message_id}.")
         return
 
     # Add the reaction to the message
     try:
         await message.add_reaction(emoji)
-        await ctx.send(f"✅ Reaction role set! React with {emoji} to get the {role.name} role.")
+        await ctx.respond(f"✅ Reaction role set! React with {emoji} to get the {role.name} role.")
     except discord.DiscordException as e:
-        await ctx.send(f"❌ Error adding reaction: {str(e)}")
+        await ctx.respond(f"❌ Error adding reaction: {str(e)}")
         return
 
     # Store the emoji-role mapping in settings or a dictionary
@@ -662,12 +662,12 @@ async def rr(ctx, message_id: int, emoji: str, *, role: discord.Role):
 async def setautorole(ctx, role: discord.Role):
     """Sets the Auto Role for new members."""
     update_setting(ctx.guild.id, "Auto Role", role.name)
-    await ctx.send(f"✅ Auto Role set to: **{role.name}**")
+    await ctx.respond(f"✅ Auto Role set to: **{role.name}**")
 
 # Command: Set Welcome Message
-@bot.command(name="setwelcome", description="Sets the server´s welcome message.", category="Moderation")
+@bot.slash_command(name="setwelcome", description="Sets the server´s welcome message.", category="Moderation")
 @commands.has_role("Staff")
-async def setwelcome(ctx, channel: discord.TextChannel = None, *, message: str):
+async def setwelcome(ctx, message: str, *, channel: discord.TextChannel = None):
     """Sets a custom welcome message and optionally a specific welcome channel."""
     guild_id = str(ctx.guild.id)
     settings = load_settings()
@@ -682,9 +682,9 @@ async def setwelcome(ctx, channel: discord.TextChannel = None, *, message: str):
     # Store the selected channel (if provided)
     if channel:
         settings[guild_id]["Welcome Channel"] = channel.id
-        await ctx.send(f"✅ Welcome message set! It will be sent in {channel.mention}.")
+        await ctx.respond(f"✅ Welcome message set! It will be sent in {channel.mention}.")
     else:
-        await ctx.send("✅ Welcome message updated! It will be sent in the first available channel.")
+        await ctx.respond("✅ Welcome message updated! It will be sent in the first available channel.")
 
     # Save settings to file
     save_settings(settings)
@@ -696,7 +696,7 @@ async def setwelcome(ctx, channel: discord.TextChannel = None, *, message: str):
 async def setaiprompt(ctx, *, prompt: str):
     """Sets the system prompt for AI interactions."""
     update_setting(ctx.guild.id, "AI Prompt", prompt)
-    await ctx.send("✅ AI system prompt updated!")
+    await ctx.respond("✅ AI system prompt updated!")
 
 # Command: View Current Settings
 @bot.command(name="viewsettings", description="View the settings for this server.", category="Moderation")
@@ -708,11 +708,11 @@ async def viewsettings(ctx):
     guild_settings = settings.get(guild_id, {})
 
     if not guild_settings:
-        await ctx.send("⚠ No settings configured for this server.")
+        await ctx.respond("⚠ No settings configured for this server.")
         return
 
     formatted_settings = "\n".join([f"**{key}:** {value}" for key, value in guild_settings.items()])
-    await ctx.send(f"🔧 **Current Settings:**\n{formatted_settings}")
+    await ctx.respond(f"🔧 **Current Settings:**\n{formatted_settings}")
 
 
 @bot.command(name="modsetup", description="Sets up the server for Milo.", category="Moderation")
@@ -731,122 +731,121 @@ async def modsetup(ctx):
 
         existing_channel = discord.utils.get(guild.text_channels, name="milo-mod-logs")
         if existing_channel:
-            await ctx.send("⚠️ 'milo-mod-logs' channel already exists!")
+            await ctx.respond("⚠️ 'milo-mod-logs' channel already exists!")
         else:
             await guild.create_text_channel('milo-mod-logs', overwrites=overwrites)
-            await ctx.send("✅ Created 'milo-mod-logs' channel with restricted access!")
+            await ctx.respond("✅ Created 'milo-mod-logs' channel with restricted access!")
     else:
-        await ctx.send("❌ You do not have permission to create this channel. To add staff, use the add staff command.")
+        await ctx.respond("❌ You do not have permission to create this channel. To add staff, use the add staff command.")
 
 
 @bot.command(name="riggedcoinflip", description="Win every bet.", category="Utilities")
 async def riggedcoinflip(ctx):
-    await ctx.send('Heads')
+    await ctx.respond('Heads')
 
 
 @bot.command(name="image", description="Gets an image of choice.", category="Image")
 async def image(ctx, *, query):
-    await ctx.send(get_pixabay_image(query))
+    await ctx.respond(get_pixabay_image(query))
 
 
 @bot.command(name="gif", description="Gets a gif of choice. ", category="Image")
 async def gif(ctx, *, query):
-    async with ctx.typing():
-        tenorapikey = os.getenv('TENOR_API')
-        clientkey = "The_Path"
-        await ctx.send(get_random_gif(query, tenorapikey, clientkey))
+    tenorapikey = os.getenv('TENOR_API')
+    clientkey = "The_Path"
+    await ctx.respond(get_random_gif(query, tenorapikey, clientkey))
 
 
 @bot.command(name="ai", description="Talk to Milo!", category="Fun")
 async def ai(ctx, *, user_input: str):
-    async with ctx.typing():
-        # Check if the response is already cached
-        if user_input in response_cache:
-            response = response_cache[user_input]
-        else:
-            try:
-                # Get AI response from the get_ai function
-                response = get_ai(user_input)
+    await ctx.defer()
+    # Check if the response is already cached
+    if user_input in response_cache:
+        response = response_cache[user_input]
+    else:
+        try:
+            # Get AI response from the get_ai function
+            response = get_ai(user_input)
 
-                # Cache the response for future use
-                response_cache[user_input] = response
+            # Cache the response for future use
+            response_cache[user_input] = response
 
-                # Save the updated cache to the file
-                save_cache(response_cache)
+            # Save the updated cache to the file
+            save_cache(response_cache)
 
-            except Exception as e:
-                # Check if it's a rate limit error (Error code: 429)
-                website = os.getenv('Website')
-                if "429" in str(e):
-                    await ctx.send(
-                        f"Sorry, we've hit the rate limit for the AI API. To help increase this limit, [Buy us a Coffee!]({website})"
-                    )
-                    # Log the error for debugging
-                    print(f"Rate limit error: {e}")
-                else:
-                    # For other errors, simply send an error message
-                    await ctx.send(f"An error occurred: {e}")
-                    return
+        except Exception as e:
+            # Check if it's a rate limit error (Error code: 429)
+            website = os.getenv('Website')
+            if "429" in str(e):
+                await ctx.respond(
+                    f"Sorry, we've hit the rate limit for the AI API. To help increase this limit, [Buy us a Coffee!]({website})"
+                )
+                # Log the error for debugging
+                print(f"Rate limit error: {e}")
+            else:
+                # For other errors, simply send an error message
+                await ctx.respond(f"An error occurred: {e}")
+                return
 
     # Send the AI response in the original channel
-    await ctx.send(f"{response}\n -# Milo ai can make mistakes. Check important info.")
+    await ctx.respond(f"{response}\n-# Milo ai can make mistakes. Check important info.")
 
 
 @bot.command(name="magic8ball", description="What will it answer?", category="Fun")
 async def magic8ball(ctx):
-    await ctx.send(random.choice(eight_ball_answers))
+    await ctx.respond(random.choice(eight_ball_answers))
 
 
 @bot.command(name="coinflip", description="Chooses between heads and tails.", category="Utilities")
 async def coinflip(ctx):
     chance = random.randint(1, 2)
     if chance == 1:
-        await ctx.send("Heads")
+        await ctx.respond("Heads")
     else:
-        await ctx.send("Tails")
+        await ctx.respond("Tails")
 
 
-@bot.command(name="choice", description="Chooses between yes and no.", category="Utilities")
+@bot.slash_command(name="choice", description="Chooses between yes and no.")
 async def choice(ctx):
     chance = random.randint(1, 2)
     if chance == 1:
-        await ctx.send("Yes")
+        await ctx.respond("Yes")
     else:
-        await ctx.send("No")
+        await ctx.respond("No")
 
 
 @bot.command(name="choice2", description="Chooses between yes, no and maybe.", category="Utilities")
 async def choice2(ctx):
     chance = random.randint(1, 3)
     if chance == 1:
-        await ctx.send("Yes")
+        await ctx.respond("Yes")
     elif chance == 2:
-        await ctx.send("No")
+        await ctx.respond("No")
     else:
-        await ctx.send("Maybe")
+        await ctx.respond("Maybe")
 
 
 @bot.command(name="magic", description="Summons magical powers.", category="Fun")
 async def magic(ctx):
-    await ctx.send("Aberacadabera, You're a Camera!")
+    await ctx.respond("Aberacadabera, You're a Camera!")
 
 
 @bot.command(name="cat", description="Gets a random cat.", category="Fun")
 async def cat(ctx):
-    await ctx.reply(get_cat())
+    await ctx.respond(get_cat())
 
 
 @bot.command(name="arebirdsreal", description="Are they?", category="Fun")
 async def arebirdsreal(ctx):
-    await ctx.send("No.")
+    await ctx.respond("No.")
     msg = await bot.wait_for("message")
     if msg.content.lower() == "really?":
-        await ctx.send("Yes, of course they're real.")
+        await ctx.respond("Yes, of course they're real.")
 
 
 @bot.command(name="languages", description="View languages and their language codes for the translate command.", category="Fun")
 async def languages(ctx):
-    await ctx.send(
+    await ctx.respond(
         'Supported languages: Afrikaans (af), Albanian (sq), Amharic (am), Arabic (ar), Armenian (hy), Assamese (as), Aymara (ay), Azerbaijani (az), Bambara (bm), Basque (eu), Belarusian (be), Bengali (bn), Bhojpuri (bho), Bosnian (bs), Bulgarian (bg), Catalan (ca), Cebuano (ceb), Chichewa (ny), Chinese (Simplified) (zh), Chinese (Traditional) (zh-TW), Corsican (co), Croatian (hr), Czech (cs), Danish (da), Dhivehi (dv), Dogri (doi), Dutch (nl), English (en), Esperanto (eo), Estonian (et), Ewe (ee), Filipino (fil), Finnish (fi), French (fr), Frisian (fy), Galician (gl), Georgian (ka), German (de), Greek (el), Guarani (gn), Gujarati (gu), Haitian Creole (ht), Hausa (ha), Hawaiian (haw), Hebrew (he), Hindi (hi), Hmong (hmn), Hungarian (hu), Icelandic (is), Igbo (ig), Ilocano (ilo), Indonesian (id), Irish (ga), Italian (it), Japanese (ja), Javanese (jv), Kannada (kn), Kazakh (kk), Khmer (km), Kinyarwanda (rw), Konkani (gom), Korean (ko), Krio (kri), Kurdish (Kurmanji) (ku), Kurdish (Sorani) (ckb), Kyrgyz (ky), Lao (lo), Latin (la), Latvian (lv), Lingala (ln), Lithuanian (lt), Luganda (lg), Luxembourgish (lb), Macedonian (mk), Maithili (mai), Malagasy (mg), Malay (ms), Malayalam (ml), Maltese (mt), Maori (mi), Marathi (mr), Meiteilon (Manipuri) (mni), Mizo (lus), Mongolian (mn), Myanmar (Burmese) (my), Nepali (ne), Norwegian (no), Odia (Oriya) (or), Oromo (om), Pashto (ps), Persian (fa), Polish (pl), Portuguese (pt), Punjabi (pa), Quechua (qu), Romanian (ro), Russian (ru), Samoan (sm), Sanskrit (sa), Scots Gaelic (gd), Sepedi (nso), Serbian (sr), Sesotho (st), Shona (sn), Sindhi (sd), Sinhala (si), Slovak (sk), Slovenian (sl), Somali (so), Spanish (es), Sundanese (su), Swahili (sw), Swedish (sv), Tajik (tg), Tamil (ta), Tatar (tt), Telugu (te), Thai (th), Tigrinya (ti), Tsonga (ts), Turkish (tr), Turkmen (tk), Twi (tw), Ukrainian (uk), Urdu (ur), Uyghur (ug), Uzbek (uz), Vietnamese (vi), Welsh (cy), Xhosa (xh), Yiddish (yi), Yoruba (yo), Zulu (zu)'
     )
 
@@ -890,9 +889,9 @@ async def sendpostcard(ctx, recipient: discord.User, *, message=None):
         await recipient.send(
             f"📬 You've received a new postcard from {ctx.author.name} ({ctx.author.mention})! Use `;openpostcard` to view your postcards. 🎉"
         )
-        await ctx.send(f"✅ Postcard sent to {recipient.mention}!")
+        await ctx.respond(f"✅ Postcard sent to {recipient.mention}!")
     except discord.Forbidden:
-        await ctx.send(
+        await ctx.respond(
             f"❌ Could not send a DM to {recipient.mention}. Please make sure their DMs are open."
         )
 
@@ -920,7 +919,7 @@ async def openpostcard(ctx):
         # Save the updated postcards to the JSON file after deletion
         save_postcards(postcard_storage)
     else:
-        await ctx.send("❌ You don’t have any postcards to open!")
+        await ctx.respond("❌ You don’t have any postcards to open!")
 
 
 @bot.command()
@@ -933,14 +932,14 @@ async def balance(ctx):
         # If the balance is a dictionary, extract the relevant currency data
         user_balance = user_balance.get('gems', 0)
 
-    await ctx.send(f'Your current balance is {user_balance} gems.')
+    await ctx.respond(f'Your current balance is {user_balance} gems.')
 
 
 # 💸 Command: Give money to another user
 @bot.command(name="give", description="Give another person gems.", category="Currency")
 async def give(ctx, member: discord.Member, amount: int):
     if amount <= 0:
-        await ctx.send("Please enter a valid amount.")
+        await ctx.respond("Please enter a valid amount.")
         return
 
     guild_id = ctx.guild.id
@@ -949,10 +948,10 @@ async def give(ctx, member: discord.Member, amount: int):
 
     if remove_money(guild_id, user_id, amount):
         add_money(guild_id, target_id, amount)
-        await ctx.send(
+        await ctx.respond(
             f"✅ {ctx.author.name} gave {amount} gems to {member.name}.")
     else:
-        await ctx.send("❌ You don’t have enough gems.")
+        await ctx.respond("❌ You don’t have enough gems.")
 
 
 # 🏆 Command: Currency leaderboard (server-specific)
@@ -967,7 +966,7 @@ async def gemboard(ctx):
         # Save the updated data with the server entry
         save_currency(data)
 
-        await ctx.send(
+        await ctx.respond(
             "No currency data for this server yet. Creating a new entry.")
 
     # Sort users by mileage (just miles)
@@ -982,7 +981,7 @@ async def gemboard(ctx):
         user = await bot.fetch_user(int(user_id))
         leaderboard_message += f"**{idx + 1}. {user.name}** - {user_data['gems']} gems\n"
 
-    await ctx.send(leaderboard_message)
+    await ctx.respond(leaderboard_message)
 
 
 @bot.command(name="level", description="View your level.", category="Leveling")
@@ -990,11 +989,11 @@ async def level(ctx):
     data = read_user_data()
     user_id = str(ctx.author.id)
     if user_id not in data:
-        await ctx.send(f"{ctx.author.name}, you haven't earned any XP yet!")
+        await ctx.respond(f"{ctx.author.name}, you haven't earned any XP yet!")
         return
 
     user_data = data[user_id]
-    await ctx.send(
+    await ctx.respond(
         f"{ctx.author.name}, you are level {user_data['level']} with {user_data['xp']} XP."
     )
 
@@ -1069,7 +1068,7 @@ async def daily(ctx):
                              data[guild_id][user_id]["last_daily"])
         hours_left = int(time_left // 3600)
         minutes_left = int((time_left % 3600) // 60)
-        await ctx.send(
+        await ctx.respond(
             f"{ctx.author.mention}, you can only claim a daily once every 24 hours. Please wait {hours_left} hours and {minutes_left} minutes before your next daily."
         )
         return
@@ -1082,13 +1081,17 @@ async def daily(ctx):
     with open("currency.json", "w") as f:
         json.dump(data, f, indent=4)
 
-    await ctx.send(
+    await ctx.respond(
         f"💎 {ctx.author.mention}, You earned **500 gems** 💎! Come back in 24 hours for another 500."
     )
 
-@bot.command(name="addcommand", description="Allows staff to add a custom command.", category="Moderation")
+@bot.slash_command(name="addcommand", description="Allows staff to add a custom command.", category="Moderation")
 @commands.has_role("Staff")
-async def addcommand(ctx, command_name: str, *, response: str):
+async def give(
+    ctx: discord.ApplicationContext,
+    command_name: str,  # Required parameter (comes first)
+    response: str  # Required parameter
+):
     """Adds a custom command to the server."""
     settings = load_settings()
     guild_id = str(ctx.guild.id)
@@ -1107,7 +1110,7 @@ async def addcommand(ctx, command_name: str, *, response: str):
     # Save the settings back to the file
     save_settings(settings)
 
-    await ctx.send(f"✅ Custom command `{command_name}` added successfully!")
+    await ctx.respond(f"✅ Custom command `{command_name}` added successfully!")
 
 # Command to remove a custom command
 @bot.command(name="removecommand", description="Allows staff to remove a custom command.", category="Moderation")
@@ -1118,15 +1121,15 @@ async def removecommand(ctx, command_name: str):
     guild_id = str(ctx.guild.id)
 
     if guild_id not in settings or "custom_commands" not in settings[guild_id]:
-        await ctx.send("❌ No custom commands have been set yet.")
+        await ctx.respond("❌ No custom commands have been set yet.")
         return
 
     if command_name in settings[guild_id]["custom_commands"]:
         del settings[guild_id]["custom_commands"][command_name]
         save_settings(settings)
-        await ctx.send(f"✅ Custom command `{command_name}` removed successfully!")
+        await ctx.respond(f"✅ Custom command `{command_name}` removed successfully!")
     else:
-        await ctx.send(f"❌ Command `{command_name}` not found.")
+        await ctx.respond(f"❌ Command `{command_name}` not found.")
 
 
 
@@ -1167,7 +1170,7 @@ async def send_dm(user: discord.Member, message: str):
 async def kick(ctx, member: discord.Member, *, reason="No reason provided"):
     try:
         await member.kick(reason=reason)
-        await ctx.send(f"✅ {member.mention} has been kicked for: **{reason}**")
+        await ctx.respond(f"✅ {member.mention} has been kicked for: **{reason}**")
 
         # Log to mod channel
         log_channel = discord.utils.get(ctx.guild.text_channels, name="milo-mod-logs")
@@ -1175,9 +1178,9 @@ async def kick(ctx, member: discord.Member, *, reason="No reason provided"):
             await log_channel.send(f"👢 **{member}** was kicked by {ctx.author.mention} for: **{reason}**")
 
     except discord.Forbidden:
-        await ctx.send("❌ I don’t have permission to kick this user.")
+        await ctx.respond("❌ I don’t have permission to kick this user.")
     except Exception as e:
-        await ctx.send(f"⚠️ Error: {e}")
+        await ctx.respond(f"⚠️ Error: {e}")
 
 
 # 🔨 **Ban Command**
@@ -1186,16 +1189,16 @@ async def kick(ctx, member: discord.Member, *, reason="No reason provided"):
 async def ban(ctx, member: discord.Member, *, reason="No reason provided"):
     try:
         await member.ban(reason=reason)
-        await ctx.send(f"✅ {member.mention} has been banned for: **{reason}**")
+        await ctx.respond(f"✅ {member.mention} has been banned for: **{reason}**")
 
         # Log to mod channel
         log_channel = discord.utils.get(ctx.guild.text_channels, name="milo-mod-logs")
         if log_channel:
             await log_channel.send(f"⛔ **{member}** was banned by {ctx.author.mention} for: **{reason}**")
     except discord.Forbidden:
-        await ctx.send("❌ I don’t have permission to ban this user.")
+        await ctx.respond("❌ I don’t have permission to ban this user.")
     except Exception as e:
-        await ctx.send(f"⚠️ Error: {e}")
+        await ctx.respond(f"⚠️ Error: {e}")
 
 
 # 🔨 **Report Command**
@@ -1215,7 +1218,7 @@ async def report(ctx, member: discord.Member, *, reason="No reason provided"):
         data["reports"].append(report_entry)
         save_data(data)
 
-        await ctx.send(f"✅ {ctx.author.mention}, your report on {member.mention} has been recorded.")
+        await ctx.respond(f"✅ {ctx.author.mention}, your report on {member.mention} has been recorded.")
 
         # Log to mod channel
         log_channel = discord.utils.get(ctx.guild.text_channels, name="milo-mod-logs")
@@ -1223,18 +1226,18 @@ async def report(ctx, member: discord.Member, *, reason="No reason provided"):
             await log_channel.send(
                 f"🚨 **Report Alert!** 🚨\n<:purple_arrow:1340691455152361653>**Reporter:** {ctx.author.mention}\n<:purple_arrow:1340691455152361653>**Accused:** {member.mention}\n<:purple_arrow:1340691455152361653>**Reason:** {reason}")
     except Exception as e:
-        await ctx.send(f"⚠️ Error: {e}")
+        await ctx.respond(f"⚠️ Error: {e}")
 
 warnings={}
 # Warn Command
-@bot.command(name="Warn", description="Allows staff to warn a user.", category="Moderation")
+@bot.command(name="warn", description="Allows staff to warn a user.", category="Moderation")
 @commands.has_role("Staff")
 async def warn(ctx, member: discord.Member, *, reason):
     if member.id not in warnings:
         warnings[member.id] = []
     warnings[member.id].append(reason)
     save_data("warnings_file", warnings)
-    await ctx.send(f'{member} has been warned for: {reason}')
+    await ctx.respond(f'{member} has been warned for: {reason}')
 
     # Send DM to staff
     dm_message = f"{ctx.author.name} has warned {member} for: {reason} in {ctx.guild.name}"
@@ -1245,15 +1248,15 @@ async def warn(ctx, member: discord.Member, *, reason):
 @commands.has_role("Staff")
 async def poll(ctx, question, *options):
     if len(options) < 2:
-        await ctx.send("Please provide at least two options for the poll.")
+        await ctx.respond("Please provide at least two options for the poll.")
         return
     if len(options) > 10:
-        await ctx.send("Please provide no more than 10 options for the poll.")
+        await ctx.respond("Please provide no more than 10 options for the poll.")
         return
     embed = discord.Embed(title=question,
                           description="\n".join([f"{index + 1}. {option}" for index, option in enumerate(options)]),
                           color=discord.Color.blue())
-    poll_message = await ctx.send(embed=embed)
+    poll_message = await ctx.respond(embed=embed)
 
     for i in range(len(options)):
         await poll_message.add_reaction(f"{chr(127462 + i)}")  # Adds reactions A, B, C...
@@ -1261,54 +1264,54 @@ async def poll(ctx, question, *options):
 
 @bot.command(name="butter", description="Summons the power of butter.", category="Fun")
 async def butter(ctx):
-    await ctx.reply("Oh No! The Butter Flies!")
-    await ctx.reply("<:butterbutterfly:1338905847425663077>")
+    await ctx.respond("Oh No! The Butter Flies!")
+    await ctx.respond("<:butterbutterfly:1338905847425663077>")
 
+# Help commands dictionary
 help_commands = {
     "Moderation": {
-        "ban": {"emoji": "🔨", "description": "Bans a user from the server.", "usage": "`;ban @user [reason]`"},
-        "kick": {"emoji": "👢", "description": "Kicks a user from the server.", "usage": "`;kick @user [reason]`"},
-        "warn": {"emoji": "⚠️", "description": "Warns a user and logs it.", "usage": "`;warn @user [reason]`"},
-        "report": {"emoji": "📩", "description": "Reports a user to staff.", "usage": "`;report @user [reason]`"},
-        "addcommand": {"emoji": "🛠️", "description": "Allows staff to add a custom command.", "usage": "`;addcommand [command_name] [response]`"},
-        "removecommand": {"emoji": "❌", "description": "Allows staff to remove a custom command.", "usage": "`;removecommand [command_name]`"},
+        "ban": {"emoji": "🔨", "description": "Bans a user from the server.", "usage": "/ban @user [reason]"},
+        "kick": {"emoji": "👢", "description": "Kicks a user from the server.", "usage": "/kick @user [reason]"},
+        "warn": {"emoji": "⚠️", "description": "Warns a user and logs it.", "usage": "/warn @user [reason]"},
+        "report": {"emoji": "📩", "description": "Reports a user to staff.", "usage": "/report @user [reason]"},
+        "addcommand": {"emoji": "🛠️", "description": "Allows staff to add a custom command.", "usage": "/addcommand [command_name] [response]"},
+        "removecommand": {"emoji": "❌", "description": "Allows staff to remove a custom command.", "usage": "/removecommand [command_name]"},
     },
     "Utility": {
-        "help": {"emoji": "❓", "description": "Shows this help menu.", "usage": "`;help [command]`"},
-        "openpostcard": {"emoji": "🌍", "description": "Opens your postcards.", "usage": "`;openpostcard`"},
-        "poll": {"emoji": "📊", "description": "Creates a poll with reactions.", "usage": "`;poll <question> option1` Surrond the question and options in""."},
-        "sendpostcard": {"emoji": "💌", "description": "Send a postcard to another user.", "usage": "`;sendpostcard @user <message>`"},
-        "coinflip": {"emoji": "🪙", "description": "Heads or Tails?", "usage": "`;coinflip`"},
-        "riggedcoinflip": {"emoji": "🤞", "description": "Heads or Heads? Win every bet!", "usage": "`;riggedcoinflip`"},
-        "choice": {"emoji": "🤔", "description": "Chooses between yes and no.", "usage": "`;choice`"},
-        "choice2": {"emoji": "🤔", "description": "Chooses between yes, no and maybe.", "usage": "`;choice2`"},
+        "help": {"emoji": "❓", "description": "Shows this help menu.", "usage": "/help [command]"},
+        "openpostcard": {"emoji": "🌍", "description": "Opens your postcards.", "usage": "/openpostcard"},
+        "poll": {"emoji": "📊", "description": "Creates a poll with reactions.", "usage": "/poll <question> option1"},
+        "sendpostcard": {"emoji": "💌", "description": "Send a postcard to another user.", "usage": "/sendpostcard @user <message>"},
+        "coinflip": {"emoji": "🪙", "description": "Heads or Tails?", "usage": "/coinflip"},
+        "riggedcoinflip": {"emoji": "🤞", "description": "Heads or Heads? Win every bet!", "usage": "/riggedcoinflip"},
+        "choice": {"emoji": "🤔", "description": "Chooses between yes and no.", "usage": "/choice"},
+        "choice2": {"emoji": "🤔", "description": "Chooses between yes, no and maybe.", "usage": "/choice2"},
     },
     "Currency": {
-        "give": {"emoji": "💸", "description": "Give gems to another user.", "usage": "`;give @user [amount]`"},
-        "gemboard": {"emoji": "🏆", "description": "View the currency leaderboard.", "usage": "`;gemboard`"},
-        "balance": {"emoji": "💰", "description": "Check your balance.", "usage": "`;balance`"},
-        "daily": {"emoji": "✈️", "description": "Get 500 gems every day.", "usage": "`;daily`"}
+        "give": {"emoji": "💸", "description": "Give gems to another user.", "usage": "/give @user [amount]"},
+        "gemboard": {"emoji": "🏆", "description": "View the currency leaderboard.", "usage": "/gemboard"},
+        "balance": {"emoji": "💰", "description": "Check your balance.", "usage": "/balance"},
+        "daily": {"emoji": "✈️", "description": "Get 500 gems every day.", "usage": "/daily"}
     },
     "Leveling": {
-        "level": {"emoji": "📈", "description": "View your current level and XP.", "usage": "`;level`"}
+        "level": {"emoji": "📈", "description": "View your current level and XP.", "usage": "/level"}
     },
     "Fun": {
-        "butter": {"emoji": "🧈", "description": "Summons the power of butter.", "usage": "`;butter`"},
-        "8ball": {"emoji": "🎱", "description": "Ask the magic 8-ball a question.", "usage": "`;8ball <question>`"},
-        "ai": {"emoji": "🤖", "description": "Talk to Milo.", "usage": "`;ai <prompt>`"},
+        "butter": {"emoji": "🧈", "description": "Summons the power of butter.", "usage": "/butter"},
+        "8ball": {"emoji": "🎱", "description": "Ask the magic 8-ball a question.", "usage": "/8ball <question>"},
+        "ai": {"emoji": "🤖", "description": "Talk to Milo.", "usage": "/ai <prompt>"},
     },
     "Image": {
-        "image": {"emoji": "📷", "description": "Gets an image.", "usage": "`;image <prompt>`"},
-        "gif": {"emoji": "🤣", "description": "Gets a gif.", "usage": "`;gif <prompt>`"},
+        "image": {"emoji": "📷", "description": "Gets an image.", "usage": "/image <prompt>"},
+        "gif": {"emoji": "🤣", "description": "Gets a gif.", "usage": "/gif <prompt>"},
     }
 }
 
-
-@bot.command()
-async def help(ctx, command=None):
+# Slash command: Help
+@bot.slash_command(name="help", description="Shows help information.")
+async def help(ctx: discord.ApplicationContext, command: str = None):
     embed = discord.Embed(title="Help Command", color=discord.Color(0xBE38F3))
 
-    # If a specific command is requested
     if command:
         command_info = None
         for category, commands in help_commands.items():
@@ -1316,7 +1319,6 @@ async def help(ctx, command=None):
                 command_info = commands[command]
                 break
 
-        # If the command is found, show its details
         if command_info:
             embed.add_field(
                 name=f"{command_info['emoji']} {command}",
@@ -1325,21 +1327,12 @@ async def help(ctx, command=None):
             )
         else:
             embed.add_field(name="Error", value="Command not found.", inline=False)
-
-    # If no command is requested, show all commands
     else:
         for category, commands in help_commands.items():
-            category_field = ""
-            for cmd, info in commands.items():
-                category_field += f"{info['emoji']} **{cmd}**: {info['description']}\n"
+            category_field = "".join(f"{info['emoji']} **{cmd}**: {info['description']}\n" for cmd, info in commands.items())
+            embed.add_field(name=f"{category} Commands", value=category_field, inline=False)
 
-            embed.add_field(
-                name=f"{category} Commands",
-                value=category_field,
-                inline=False
-            )
-
-    await ctx.send(embed=embed)
+    await ctx.respond(embed=embed)
 
 
 def is_url(string):
@@ -1363,50 +1356,49 @@ def get_impact_font(size):
 # Meme command
 @bot.command(name="meme", description="Generates a meme with a given image and text.")
 async def meme(ctx, image_input: str, *, text: str):
-    async with ctx.typing():
-        try:
-            # Use the URL directly if it's valid; otherwise, get an image from Pixabay
-            image_url = image_input if is_url(image_input) else get_pixabay_image(image_input)
+    try:
+        # Use the URL directly if it's valid; otherwise, get an image from Pixabay
+        image_url = image_input if is_url(image_input) else get_pixabay_image(image_input)
 
-            if not image_url:
-                await ctx.send("Couldn't find a valid image. Try another keyword.")
-                return
+        if not image_url:
+            await ctx.respond("Couldn't find a valid image. Try another keyword.")
+            return
 
-            # Download the image
-            response = requests.get(image_url)
-            if response.status_code != 200:
-                await ctx.send("Failed to download image.")
-                return
+        # Download the image
+        response = requests.get(image_url)
+        if response.status_code != 200:
+            await ctx.respond("Failed to download image.")
+            return
 
-            # Open image with PIL
-            image = Image.open(BytesIO(response.content))
+        # Open image with PIL
+        image = Image.open(BytesIO(response.content))
 
-            # Add text (Meme Style)
-            draw = ImageDraw.Draw(image)
-            font_size = int(image.width * 0.1)
-            font = get_impact_font(font_size)
+        # Add text (Meme Style)
+        draw = ImageDraw.Draw(image)
+        font_size = int(image.width * 0.1)
+        font = get_impact_font(font_size)
 
-            # Text positioning
-            text_x = image.width // 2
-            text_y = int(image.height * 0.05)
+        # Text positioning
+        text_x = image.width // 2
+        text_y = int(image.height * 0.05)
 
-            # Outline effect
-            outline_range = 3
-            for x_offset in range(-outline_range, outline_range + 1):
-                for y_offset in range(-outline_range, outline_range + 1):
-                    draw.text((text_x + x_offset, text_y + y_offset), text, font=font, fill="black", anchor="mm")
+        # Outline effect
+        outline_range = 3
+        for x_offset in range(-outline_range, outline_range + 1):
+            for y_offset in range(-outline_range, outline_range + 1):
+                draw.text((text_x + x_offset, text_y + y_offset), text, font=font, fill="black", anchor="mm")
 
-            # Main text
-            draw.text((text_x, text_y), text, font=font, fill="white", anchor="mm")
+        # Main text
+        draw.text((text_x, text_y), text, font=font, fill="white", anchor="mm")
 
-            # Save and send the meme
-            with BytesIO() as image_binary:
-                image.save(image_binary, "PNG")
-                image_binary.seek(0)
-                await ctx.send(file=discord.File(image_binary, "meme.png"))
+        # Save and send the meme
+        with BytesIO() as image_binary:
+            image.save(image_binary, "PNG")
+            image_binary.seek(0)
+            await ctx.respond(file=discord.File(image_binary, "meme.png"))
 
-        except Exception as e:
-            await ctx.send(f"Error: {e}")
+    except Exception as e:
+        await ctx.respond(f"Error: {e}")
 
 
 
@@ -1419,12 +1411,12 @@ async def addbadword(ctx, *, word):
     bad_words = settings.get(guild_id, {}).get("bad_words", [])
 
     if word.lower() in bad_words:
-        await ctx.send("That word is already in the filter!")
+        await ctx.respond("That word is already in the filter!")
         return
 
     bad_words.append(word.lower())
     update_setting(guild_id, "bad_words", bad_words)
-    await ctx.send(f"Added `{word}` to the bad word filter.")
+    await ctx.respond(f"Added `{word}` to the bad word filter.")
 
 # ❌ Command: Remove a bad word
 @bot.command(name="removebadword", description="Remove a word from the filter (Admins only)")
@@ -1435,12 +1427,12 @@ async def removebadword(ctx, *, word):
     bad_words = settings.get(guild_id, {}).get("bad_words", [])
 
     if word.lower() not in bad_words:
-        await ctx.send("That word is not in the filter!")
+        await ctx.respond("That word is not in the filter!")
         return
 
     bad_words.remove(word.lower())
     update_setting(guild_id, "bad_words", bad_words)
-    await ctx.send(f"Removed `{word}` from the bad word filter.")
+    await ctx.respond(f"Removed `{word}` from the bad word filter.")
 
 # 📜 Command: List all filtered words
 @bot.command(name="listbadwords", description="List all filtered words for this server")
@@ -1451,9 +1443,9 @@ async def listbadwords(ctx):
     bad_words = settings.get(guild_id, {}).get("bad_words", [])
 
     if not bad_words:
-        await ctx.send("No bad words are currently filtered.")
+        await ctx.respond("No bad words are currently filtered.")
     else:
-        await ctx.send("Filtered words: " + ", ".join(bad_words))
+        await ctx.respond("Filtered words: " + ", ".join(bad_words))
 
 
 SERVER_LIST_FILE = "server_list.json"
@@ -1555,7 +1547,7 @@ class VerifyDropdown(Select):
 async def register(ctx, server_name):
     """Registers a server with a name and invite link, and checks for bad words."""
     if not is_valid_server_name(server_name):
-        await ctx.send(
+        await ctx.respond(
             "❌ The server name contains restricted words (e.g., Milo, official, scam). Please choose another name. Think this is a mistake? File a patch in our [github](https://github.com/caydenworld/Milo/)")
         return
 
@@ -1563,7 +1555,7 @@ async def register(ctx, server_name):
 
     # Check if the guild already has a registered server
     if str(ctx.guild.id) in servers:
-        await ctx.send("❌ This server already has a registered listing.")
+        await ctx.respond("❌ This server already has a registered listing.")
         return
 
     # Generate an invite link
@@ -1579,7 +1571,7 @@ async def register(ctx, server_name):
 
     save_servers(servers)
 
-    await ctx.send(f"✅ `{server_name}` has been added to the Milo server list!")
+    await ctx.respond(f"✅ `{server_name}` has been added to the Milo server list!")
 
 
 @bot.command(name="servers", description="Shows available servers to join")
@@ -1587,7 +1579,7 @@ async def servers(ctx):
     servers = load_servers()
 
     if not servers:
-        await ctx.send("❌ No servers have been registered yet.")
+        await ctx.respond("❌ No servers have been registered yet.")
         return
 
     view = View()
@@ -1595,7 +1587,7 @@ async def servers(ctx):
     view.add_item(dropdown)
 
     # Send the message with the dropdown and view
-    await ctx.send("📜 **Milo Server List:**", view=view)
+    await ctx.respond("📜 **Milo Server List:**", view=view)
 
 
 @bot.command(name="verify", description="Verifies a server as trusted (Admin only)")
@@ -1605,7 +1597,7 @@ async def verify(ctx):
     servers = load_servers()
 
     if not any(not data.get("verified") for data in servers.values()):
-        await ctx.send("❌ No unverified servers available.")
+        await ctx.respond("❌ No unverified servers available.")
         return
 
     view = View()
@@ -1613,7 +1605,7 @@ async def verify(ctx):
     view.add_item(dropdown)
 
     # Send the message with the dropdown to verify
-    await ctx.send("🔒 **Select a server to verify:**", view=view)
+    await ctx.respond("🔒 **Select a server to verify:**", view=view)
 
 
 ytdl_format_options = {
@@ -1695,30 +1687,29 @@ class MusicControlView(discord.ui.View):
 async def play(ctx, *, search: str):
     if ctx.voice_client is None:
         view = DropdownView(channels=ctx.guild.voice_channels)
-        await ctx.send("Select a voice channel to join:", view=view)
+        await ctx.respond("Select a voice channel to join:", view=view)
 
         await view.wait()
 
         if view.channel_id is None:
-            await ctx.send("No channel selected.")
+            await ctx.respond("No channel selected.")
             return
 
         channel = bot.get_channel(int(view.channel_id))
         await channel.connect()
 
     loop = bot.loop  # Define the event loop
-    async with ctx.typing():
-        data = await loop.run_in_executor(None, lambda: ytdl.extract_info(search, download=False))
+    data = await loop.run_in_executor(None, lambda: ytdl.extract_info(search, download=False))
 
-        if 'entries' in data:
-            playlist = [entry['webpage_url'] for entry in data['entries']]
-            player = await YTDLSource.from_url(playlist[0], loop=loop, stream=True)
-        else:
-            player = await YTDLSource.from_url(data['webpage_url'], loop=loop, stream=True)
+    if 'entries' in data:
+        playlist = [entry['webpage_url'] for entry in data['entries']]
+        player = await YTDLSource.from_url(playlist[0], loop=loop, stream=True)
+    else:
+        player = await YTDLSource.from_url(data['webpage_url'], loop=loop, stream=True)
 
-        ctx.voice_client.play(player, after=lambda e: asyncio.run_coroutine_threadsafe(ensure_voice(ctx), loop) if e else None)
+    ctx.voice_client.play(player, after=lambda e: asyncio.run_coroutine_threadsafe(ensure_voice(ctx), loop) if e else None)
 
-    await ctx.send(f'Now playing: {player.title}', view=MusicControlView(ctx))
+    await ctx.respond(f'Now playing: {player.title}', view=MusicControlView(ctx))
 
 @bot.command(name='stop', help='Stops the music and leaves the voice channel')
 async def stop(ctx):
@@ -1732,7 +1723,7 @@ async def ensure_voice(ctx):
         if ctx.author.voice:
             await ctx.author.voice.channel.connect()
         else:
-            await ctx.send("You are not connected to a voice channel.")
+            await ctx.respond("You are not connected to a voice channel.")
             raise commands.CommandError("Author not connected to a voice channel.")
 
 
@@ -1825,11 +1816,11 @@ class UseItemView(discord.ui.View):
 async def additem(ctx, item_name: str, item_price: int, on_use: str, role: discord.Role = None):
     if role:
         marketplace_data[item_name] = {"price": item_price, "role_id": role.id, "on_use": on_use}
-        await ctx.send(
+        await ctx.respond(
             f'Added item: {item_name} for {item_price} currency, which grants the {role.name} role. Use message: "{on_use}"')
     else:
         marketplace_data[item_name] = {"price": item_price, "on_use": on_use}
-        await ctx.send(
+        await ctx.respond(
             f'Added item: {item_name} for {item_price} currency, which grants no role. Use message: "{on_use}"')
 
     save_marketplace(marketplace_data)
@@ -1838,7 +1829,7 @@ async def additem(ctx, item_name: str, item_price: int, on_use: str, role: disco
 @bot.command()
 async def marketplace(ctx):
     view = MarketplaceView()
-    await ctx.send('Select an item from the marketplace:', view=view)
+    await ctx.respond('Select an item from the marketplace:', view=view)
 
 
 @bot.command()
@@ -1847,16 +1838,16 @@ async def inventory(ctx):
     user_items = inventory.get(str(ctx.author.id), [])
 
     if not user_items:
-        await ctx.send("Your inventory is empty.")
+        await ctx.respond("Your inventory is empty.")
     else:
         items_list = "\n".join(f"- {item}" for item in user_items)
-        await ctx.send(f"**Your Inventory:**\n{items_list}")
+        await ctx.respond(f"**Your Inventory:**\n{items_list}")
 
 
 @bot.command()
 async def useitem(ctx):
     view = UseItemView(ctx.author.id)
-    await ctx.send("Select an item to use:", view=view)
+    await ctx.respond("Select an item to use:", view=view)
 
 
 # Sell Item Dropdown UI
@@ -1921,21 +1912,21 @@ async def sellitem(ctx):
 
     # Use the correct inventory variable
     if user_id not in user_inventory_data or not user_inventory_data[user_id]:
-        await ctx.send("You have no items to sell.")
+        await ctx.respond("You have no items to sell.")
         return
 
     view = SellItemView(ctx.author.id)
-    await ctx.send("Select an item to sell:", view=view)
+    await ctx.respond("Select an item to sell:", view=view)
 @bot.command()
 async def slots(ctx, bet: int):
     user_id = str(ctx.author.id)
     guild_id = str(ctx.guild.id)
     balance = get_balance(guild_id, user_id)
     if bet <= 0:
-        await ctx.send("You must bet a positive amount!")
+        await ctx.respond("You must bet a positive amount!")
         return
     if balance < bet:
-        await ctx.send("You don't have enough money to place this bet!")
+        await ctx.respond("You don't have enough money to place this bet!")
         return
     # Slot symbols
     symbols = ["🍒", "🍋", "🍇", "🍊", "🔔", "⭐", "💎"]
@@ -1953,7 +1944,7 @@ async def slots(ctx, bet: int):
     # Update balance
     add_money(guild_id, user_id, winnings if winnings > 0 else -bet)
     # Show slot result
-    await ctx.send(f"🎰 **Slots:** {' | '.join(slot_result)}\n{result_text} (New balance: {get_balance(guild_id, user_id)})")
+    await ctx.respond(f"🎰 **Slots:**\n-# Milo does not support gambling. This is for enjoyment only in a virtual environment.\n {' | '.join(slot_result)}\n{result_text} (New balance: {get_balance(guild_id, user_id)})")
 @bot.command()
 async def blackjack(ctx, bet: int):
     user_id = str(ctx.author.id)
@@ -1961,11 +1952,11 @@ async def blackjack(ctx, bet: int):
     balance = get_balance(guild_id, user_id)
 
     if bet <= 0:
-        await ctx.send("You must bet a positive amount!")
+        await ctx.respond("You must bet a positive amount!")
         return
 
     if balance < bet:
-        await ctx.send("You don't have enough money to place this bet!")
+        await ctx.respond("You don't have enough money to place this bet!")
         return
 
     def draw_card():
@@ -1997,29 +1988,29 @@ async def blackjack(ctx, bet: int):
     dealer_hand = [draw_card(), draw_card()]
     dealer_total = hand_value(dealer_hand)
 
-    await ctx.send(f"🃏 **Your hand:** {', '.join(player_hand)} (Total: {player_total})\n🤖 **Dealer's hand:** {dealer_hand[0]}, ❓")
+    await ctx.respond(f"# Blackjack\n-# Milo does not support gambling. This is for enjoyment only in a virtual environment.\n🃏 **Your hand:** {', '.join(player_hand)} (Total: {player_total})\n🤖 **Dealer's hand:** {dealer_hand[0]}, ❓")
 
     if player_total == 21:
         add_money(guild_id, user_id, bet * 2)
-        await ctx.send(f"🎉 **BLACKJACK!** You win 2x your bet! New balance: {get_balance(guild_id, user_id)}")
+        await ctx.respond(f"🎉 **BLACKJACK!** You win 2x your bet! New balance: {get_balance(guild_id, user_id)}")
         return
 
     while player_total < 21:
-        await ctx.send("Type `hit` to draw another card or `stand` to hold.")
+        await ctx.respond("Type `hit` to draw another card or `stand` to hold.")
         try:
             msg = await bot.wait_for("message", timeout=30, check=lambda m: m.author == ctx.author and m.content.lower() in ["hit", "stand"])
         except:
-            await ctx.send("Game timed out.")
+            await ctx.respond("Game timed out.")
             return
 
         if msg.content.lower() == "hit":
             player_hand.append(draw_card())
             player_total = hand_value(player_hand)
-            await ctx.send(f"🃏 **Your hand:** {', '.join(player_hand)} (Total: {player_total})")
+            await ctx.respond(f"🃏 **Your hand:** {', '.join(player_hand)} (Total: {player_total})")
 
         if player_total > 21:
             add_money(guild_id, user_id, -bet)
-            await ctx.send(f"💀 **BUST!** You lose! New balance: {get_balance(guild_id, user_id)}")
+            await ctx.respond(f"💀 **BUST!** You lose! New balance: {get_balance(guild_id, user_id)}")
             return
 
         if msg.content.lower() == "stand":
@@ -2030,16 +2021,16 @@ async def blackjack(ctx, bet: int):
         dealer_hand.append(draw_card())
         dealer_total = hand_value(dealer_hand)
 
-    await ctx.send(f"🤖 **Dealer's final hand:** {', '.join(dealer_hand)} (Total: {dealer_total})")
+    await ctx.respond(f"🤖 **Dealer's final hand:** {', '.join(dealer_hand)} (Total: {dealer_total})")
 
     if dealer_total > 21 or player_total > dealer_total:
         add_money(guild_id, user_id, bet)
-        await ctx.send(f"🎉 **You win!** New balance: {get_balance(guild_id, user_id)}")
+        await ctx.respond(f"🎉 **You win!** New balance: {get_balance(guild_id, user_id)}")
     elif dealer_total > player_total:
         add_money(guild_id, user_id, -bet)
-        await ctx.send(f"❌ **Dealer wins!** You lost. New balance: {get_balance(guild_id, user_id)}")
+        await ctx.respond(f"❌ **Dealer wins!** You lost. New balance: {get_balance(guild_id, user_id)}")
     else:
-        await ctx.send("🤝 **It's a tie!** Your bet is returned.")
+        await ctx.respond("🤝 **It's a tie!** Your bet is returned.")
 
 
 class ScratchButton(discord.ui.Button):
@@ -2106,8 +2097,7 @@ class ScratchcardView(discord.ui.View):
         else:
             win = False
 
-        # Rigged system: 1/6 chance of actually winning
-        if not win or random.randint(1, 6) != 1:
+        if not win:
             winnings = -self.bet
             result_text = "❌ **You lost!** Better luck next time."
         else:
@@ -2135,11 +2125,11 @@ async def scratchcard(ctx, bet: int):
     balance = get_balance(guild_id, user_id)
 
     if bet <= 0:
-        await ctx.send("You must bet a positive amount!")
+        await ctx.respond("You must bet a positive amount!")
         return
 
     if balance < bet:
-        await ctx.send("You don't have enough money to buy a scratch card!")
+        await ctx.respond("You don't have enough money to buy a scratch card!")
         return
 
     # Generate a 5x5 grid with random numbers (1-5)
@@ -2152,9 +2142,141 @@ async def scratchcard(ctx, bet: int):
     view = ScratchcardView(ctx, bet, grid)
 
     # Send the game board with buttons and store the message
-    bot_message = await ctx.send("🎟️ **Scratch Card - Choose 3 Spots!**", view=view)
+    bot_message = await ctx.respond("🎟️ **Scratch Card - Choose 3 Spots!**\n-# Milo does not support gambling. This is for enjoyment only in a virtual environment.", view=view)
 
     # Save the bot message inside the View
     view.bot_message = bot_message
+BIRTHDAYS_FILE = "birthdays.json"
+
+# Load birthdays from a file
+def load_birthdays():
+    try:
+        with open(BIRTHDAYS_FILE, "r") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {}
+
+# Save birthdays to a file
+def save_birthdays(data):
+    with open(BIRTHDAYS_FILE, "w") as f:
+        json.dump(data, f, indent=4)
+
+@bot.command()
+async def setbirthday(ctx, date: str):
+    """Users can set their birthday (Format: MM-DD)"""
+    user_id = str(ctx.author.id)
+    birthdays = load_birthdays()
+
+    # Validate date format
+    try:
+        datetime.datetime.strptime(date, "%m-%d")
+    except ValueError:
+        await ctx.respond("Invalid date format! Please use `MM-DD` (e.g., `12-25` for Dec 25).")
+        return
+
+    birthdays[user_id] = date
+    save_birthdays(birthdays)
+
+    await ctx.respond(f"🎉 Birthday set! I'll wish you a happy birthday on **{date}**!")
+
+@bot.command()
+async def upcomingbirthdays(ctx):
+    """Lists all upcoming birthdays"""
+    birthdays = load_birthdays()
+    if not birthdays:
+        await ctx.respond("No birthdays have been set yet!")
+        return
+
+    message = "**🎂 Upcoming Birthdays:**\n"
+    for user_id, date in birthdays.items():
+        user = await bot.fetch_user(int(user_id))
+        message += f"- {user.mention}: {date}\n"
+
+    await ctx.respond(message)
+
+@tasks.loop(hours=24)
+async def check_birthdays():
+    """Checks if it's anyone's birthday and sends a message"""
+    today = datetime.datetime.now().strftime("%m-%d")
+    birthdays = load_birthdays()
+
+    for user_id, date in birthdays.items():
+        if date == today:
+            user = await bot.fetch_user(int(user_id))
+            channel = discord.utils.get(bot.get_all_channels(), name="general")  # Change if needed
+            if channel:
+                await channel.send(f"🎂 Happy Birthday {user.mention}! 🎉🥳")
+
+
+class GiveawayView(discord.ui.View):
+    def __init__(self, duration_seconds, prize):
+        super().__init__(timeout=duration_seconds)  # Timeout matches duration
+        self.prize = prize
+        self.entries = []
+        self.message = None  # Store the giveaway message
+
+    async def start(self, ctx):
+        """Send the giveaway message and store it for later reference."""
+        embed = discord.Embed(
+            title="🎉 GIVEAWAY 🎉",
+            description=f"Prize: **{self.prize}**\nClick the button below to enter!\nDuration: {self.format_duration(self.timeout)}",
+            color=discord.Color.gold(),
+        )
+        self.message = await ctx.respond(embed=embed, view=self)
+        await asyncio.sleep(self.timeout)  # Wait for giveaway duration
+        await self.end_giveaway(ctx)
+
+    @discord.ui.button(label="Enter Giveaway 🎉", style=discord.ButtonStyle.green)
+    async def enter_giveaway(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Handles user entries when they click the button."""
+        if interaction.user.id not in self.entries:
+            self.entries.append(interaction.user.id)
+            await interaction.response.send_message(f"✅ {interaction.user.mention}, you have entered the giveaway!",
+                                                    ephemeral=True)
+        else:
+            await interaction.response.send_message("⚠️ You are already entered!", ephemeral=True)
+
+    async def end_giveaway(self, ctx):
+        """Announces the winner when the giveaway ends."""
+        if self.entries:
+            winner_id = random.choice(self.entries)
+            winner = await ctx.bot.fetch_user(winner_id)
+            await ctx.respond(f"🎉 **Giveaway Ended!** Congratulations {winner.mention}! You won **{self.prize}**! 🎁")
+        else:
+            await ctx.respond("😢 No one entered the giveaway.")
+
+    def format_duration(self, seconds):
+        """Convert seconds into a readable format like '1h 30m'."""
+        time_units = [("y", 31536000), ("mo", 2592000), ("w", 604800), ("d", 86400), ("h", 3600), ("m", 60), ("s", 1)]
+        result = []
+        for unit, unit_seconds in time_units:
+            if seconds >= unit_seconds:
+                value, seconds = divmod(seconds, unit_seconds)
+                result.append(f"{value}{unit}")
+        return " ".join(result) if result else "0s"
+
+
+@bot.command()
+@commands.has_role("Staff")
+async def giveaway(ctx, duration: str, *, prize: str):
+    """Start a giveaway with a button (Admin only)"""
+    duration_seconds = parse_duration(duration)  # Convert time input into seconds
+    if duration_seconds is None:
+        await ctx.respond("❌ Invalid duration format! Use `1s, 1m, 1h, 1d, 1w, 1mo, 1y`.")
+        return
+
+    view = GiveawayView(duration_seconds, prize)  # Pass the correct variable
+    await view.start(ctx)
+
+
+def parse_duration(duration: str):
+    """Converts duration string (e.g., 1h, 2d) into seconds."""
+    time_units = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800, "mo": 2592000, "y": 31536000}
+    try:
+        unit = duration[-1]
+        if unit in time_units:
+            return int(duration[:-1]) * time_units[unit]
+    except ValueError:
+        return None
 
 bot.run(os.getenv('DISCORD_TOKEN'))
