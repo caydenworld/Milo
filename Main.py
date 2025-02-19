@@ -22,7 +22,6 @@ import html
 import platform
 import psutil
 
-
 load_dotenv()
 
 # Files for storage
@@ -35,11 +34,12 @@ intents.messages = True
 intents.message_content = True
 intents.members = True
 
-
 # Initialize bot
 bot = discord.Bot(intents=intents)
 
 SETTINGS_FILE = "Settings.json"
+
+
 # Load inventory from JSON
 # Load inventory from JSON
 def load_inventory():
@@ -49,13 +49,16 @@ def load_inventory():
     except FileNotFoundError:
         return {}
 
+
 # Save inventory to JSON
 def save_inventory(data):
     with open("inventory.json", "w") as f:
         json.dump(data, f, indent=4)
 
+
 # Change variable name to avoid conflicts
 user_inventory_data = load_inventory()
+
 
 async def send_dm_to_staff(guild, message):
     log_channel = discord.utils.get(guild.text_channels, name="milo-mod-logs")
@@ -66,6 +69,7 @@ async def send_dm_to_staff(guild, message):
         return
 
     await log_channel.send(message)
+
 
 def load_settings():
     """Loads settings from Settings.json or returns an empty dictionary if the file doesn't exist."""
@@ -78,10 +82,12 @@ def load_settings():
         except json.JSONDecodeError:
             return {}  # Return an empty dictionary if the JSON is malformed
 
+
 def save_settings(settings):
     """Saves the given settings dictionary to Settings.json."""
     with open(SETTINGS_FILE, "w", encoding="utf-8") as file:
         json.dump(settings, file, indent=4)
+
 
 def update_setting(guild_id: str, setting_key: str, setting_value):
     """Updates a specific setting for a guild while preserving existing settings."""
@@ -98,7 +104,6 @@ def update_setting(guild_id: str, setting_key: str, setting_value):
     save_settings(settings)
 
 
-
 # Load the currency data from the JSON file
 def load_currency():
     try:
@@ -108,12 +113,14 @@ def load_currency():
                 return {}  # Ensure the data is a dictionary
             return data
     except (FileNotFoundError, json.JSONDecodeError):
-        return   # Return empty dictionary if file is missing or corrupted
+        return  # Return empty dictionary if file is missing or corrupted
+
 
 # Save currency data
 def save_currency(data):
     with open("currency.json", "w") as f:
         json.dump(data, f, indent=4)
+
 
 # Load the marketplace items from the JSON file
 def load_marketplace():
@@ -126,10 +133,12 @@ def load_marketplace():
     except (FileNotFoundError, json.JSONDecodeError):
         return {}  # Return empty dictionary if file is missing or corrupted
 
+
 # Save marketplace items
 def save_marketplace(data):
     with open("marketplace.json", "w") as f:
         json.dump(data, f, indent=4)
+
 
 def get_balance(guild_id, user_id):
     data = load_currency()
@@ -142,6 +151,8 @@ def get_balance(guild_id, user_id):
         return int(user_data.get("gems", 0))  # Default to 0 if 'gems' key is missing
 
     return 0  # Return 0 if user_data is not a dictionary (unexpected case)
+
+
 # Add money to a user (per server)
 def add_money(guild_id, user_id, amount):
     data = load_currency()
@@ -155,6 +166,7 @@ def add_money(guild_id, user_id, amount):
 
     data[guild_id][user_id]["gems"] += int(amount)  # Update the gems count
     save_currency(data)
+
 
 # Remove money from a user (per server)
 def remove_money(guild_id, user_id, amount):
@@ -238,7 +250,7 @@ async def update_xp(message, user_id, xp_earned):
 
     # Check if the user leveled up
     xp_to_next_level = data[user_id][
-        "level"] * 100  # Level up at 100 XP per level
+                           "level"] * 100  # Level up at 100 XP per level
     if data[user_id]["xp"] >= xp_to_next_level:
         data[user_id]["level"] += 1
         data[user_id]["xp"] = 0  # Reset XP after leveling up
@@ -386,11 +398,11 @@ async def on_guild_join(guild):
         embed = discord.Embed(
             title=f"Hello {guild.name}!",
             description="Thank you for inviting me to your server! I'm **Milo**, your new assistant bot. I'm here to help with moderation, custom commands, and much more! 🎉\n\n"
-            "Here's a few things you can do to get started:\n\n"
-            "- **Set up custom commands** – Need a unique command? I can help with that!\n"
-            "- **Auto Roles** – I can assign roles to new members automatically.\n"
-            "- **Moderation tools** – Let me help you keep the server clean and friendly.\n\n"
-            "I'm excited to be part of your community, and I’m always here to assist! If you need help, just type `!help`, and I'll show you all the awesome things I can do! 🚀",)
+                        "Here's a few things you can do to get started:\n\n"
+                        "- **Set up custom commands** – Need a unique command? I can help with that!\n"
+                        "- **Auto Roles** – I can assign roles to new members automatically.\n"
+                        "- **Moderation tools** – Let me help you keep the server clean and friendly.\n\n"
+                        "I'm excited to be part of your community, and I’m always here to assist! If you need help, just type `!help`, and I'll show you all the awesome things I can do! 🚀", )
 
         # Add an image to the embed (can be a URL to an image)
         embed.set_image(url="https://example.com/your-image-url.jpg")  # Replace with your own image URL
@@ -400,6 +412,8 @@ async def on_guild_join(guild):
 
     else:
         print(f"No available channels to send a welcome message in '{guild.name}'!")
+
+
 @bot.event
 async def on_member_join(member):
     """Handles new member joins, sends a welcome message in the correct channel, and assigns an auto role."""
@@ -420,12 +434,14 @@ async def on_member_join(member):
     if welcome_channel_id:
         channel = bot.get_channel(welcome_channel_id)  # Ensure the bot retrieves the channel properly
         if not channel or not channel.permissions_for(member.guild.me).send_messages:
-            print(f"❌ Cannot send message in configured welcome channel ({welcome_channel_id}) for '{member.guild.name}'!")
+            print(
+                f"❌ Cannot send message in configured welcome channel ({welcome_channel_id}) for '{member.guild.name}'!")
             channel = None  # Reset if the bot can't send messages there
 
     # Only fallback if necessary
     if not channel:
-        channel = next((c for c in member.guild.text_channels if c.permissions_for(member.guild.me).send_messages), None)
+        channel = next((c for c in member.guild.text_channels if c.permissions_for(member.guild.me).send_messages),
+                       None)
 
     if channel:
         await channel.send(welcome_message)
@@ -447,12 +463,16 @@ async def on_member_join(member):
         else:
             print(f"❌ Auto Role '{auto_role_name}' not found in '{member.guild.name}'!")
 
+
 activity = discord.Game(name=";ai")
+
+
 @bot.event
 async def on_ready():
     print(f'Logged in as {bot.user}!')
     print(bot.commands)
     await bot.change_presence(activity=activity)
+
 
 @bot.event
 async def on_raw_reaction_remove(payload):
@@ -483,6 +503,7 @@ async def on_raw_reaction_remove(payload):
             print(f"❌ Error removing role: {str(e)}")
     else:
         print(f"❌ Role with ID '{role_id}' not found!")
+
 
 @bot.event
 async def on_raw_reaction_add(payload):
@@ -547,6 +568,7 @@ async def on_command_error(ctx, error):
 
         print(f"⚠️ An error occurred in a server: {error}")
 
+
 @bot.command(name="addstaff", description="Adds a member to the staff role.", category="Moderation")
 @commands.has_role("Staff")  # Ensure the person has administrator permissions
 async def addstaff(ctx, member: discord.Member):
@@ -584,6 +606,7 @@ async def closeticket(ctx):
     else:
         await ctx.respond("This command can only be used in a ticket channel.")
 
+
 @bot.command(name="ticket", description="Opens a support ticket.", category="Utilities")
 async def ticket(ctx):
     """Creates a private ticket channel for the user."""
@@ -604,7 +627,8 @@ async def ticket(ctx):
     overwrites = {
         guild.default_role: discord.PermissionOverwrite(read_messages=False),  # Prevent everyone from seeing the ticket
         ctx.author: discord.PermissionOverwrite(read_messages=True),  # Allow the user to see their own ticket
-        bot.user: discord.PermissionOverwrite(read_messages=True, send_messages=True)  # Allow bot to see and send messages
+        bot.user: discord.PermissionOverwrite(read_messages=True, send_messages=True)
+        # Allow bot to see and send messages
 
     }
 
@@ -614,7 +638,8 @@ async def ticket(ctx):
     # Notify staff about the new ticket
     staff_role = discord.utils.get(guild.roles, name="Staff")
     if staff_role:
-        await ticket_channel.send(f"Hello {ctx.author.mention}, this is your ticket! A staff member will assist you shortly.")
+        await ticket_channel.send(
+            f"Hello {ctx.author.mention}, this is your ticket! A staff member will assist you shortly.")
         await ticket_channel.send(f"Hey {staff_role.mention}, a new ticket has been created by {ctx.author.mention}.")
 
     # Send a message in the original channel notifying the user
@@ -660,6 +685,7 @@ async def rr(ctx, message_id: int, emoji: str, *, role: discord.Role):
     # Save settings
     save_settings(settings)
 
+
 # Command: Set Auto Role
 @bot.command(name="setautorole", description="Sets the auto role for the server.", category="Moderation")
 @commands.has_role("Staff")
@@ -667,6 +693,7 @@ async def setautorole(ctx, role: discord.Role):
     """Sets the Auto Role for new members."""
     update_setting(ctx.guild.id, "Auto Role", role.name)
     await ctx.respond(f"✅ Auto Role set to: **{role.name}**")
+
 
 # Command: Set Welcome Message
 @bot.slash_command(name="setwelcome", description="Sets the server´s welcome message.", category="Moderation")
@@ -701,6 +728,7 @@ async def setaiprompt(ctx, *, prompt: str):
     """Sets the system prompt for AI interactions."""
     update_setting(ctx.guild.id, "AI Prompt", prompt)
     await ctx.respond("✅ AI system prompt updated!")
+
 
 # Command: View Current Settings
 @bot.command(name="viewsettings", description="View the settings for this server.", category="Moderation")
@@ -740,7 +768,8 @@ async def modsetup(ctx):
             await guild.create_text_channel('milo-mod-logs', overwrites=overwrites)
             await ctx.respond("✅ Created 'milo-mod-logs' channel with restricted access!")
     else:
-        await ctx.respond("❌ You do not have permission to create this channel. To add staff, use the add staff command.")
+        await ctx.respond(
+            "❌ You do not have permission to create this channel. To add staff, use the add staff command.")
 
 
 @bot.command(name="riggedcoinflip", description="Win every bet.", category="Utilities")
@@ -847,7 +876,8 @@ async def arebirdsreal(ctx):
         await ctx.respond("Yes, of course they're real.")
 
 
-@bot.command(name="languages", description="View languages and their language codes for the translate command.", category="Fun")
+@bot.command(name="languages", description="View languages and their language codes for the translate command.",
+             category="Fun")
 async def languages(ctx):
     await ctx.respond(
         'Supported languages: Afrikaans (af), Albanian (sq), Amharic (am), Arabic (ar), Armenian (hy), Assamese (as), Aymara (ay), Azerbaijani (az), Bambara (bm), Basque (eu), Belarusian (be), Bengali (bn), Bhojpuri (bho), Bosnian (bs), Bulgarian (bg), Catalan (ca), Cebuano (ceb), Chichewa (ny), Chinese (Simplified) (zh), Chinese (Traditional) (zh-TW), Corsican (co), Croatian (hr), Czech (cs), Danish (da), Dhivehi (dv), Dogri (doi), Dutch (nl), English (en), Esperanto (eo), Estonian (et), Ewe (ee), Filipino (fil), Finnish (fi), French (fr), Frisian (fy), Galician (gl), Georgian (ka), German (de), Greek (el), Guarani (gn), Gujarati (gu), Haitian Creole (ht), Hausa (ha), Hawaiian (haw), Hebrew (he), Hindi (hi), Hmong (hmn), Hungarian (hu), Icelandic (is), Igbo (ig), Ilocano (ilo), Indonesian (id), Irish (ga), Italian (it), Japanese (ja), Javanese (jv), Kannada (kn), Kazakh (kk), Khmer (km), Kinyarwanda (rw), Konkani (gom), Korean (ko), Krio (kri), Kurdish (Kurmanji) (ku), Kurdish (Sorani) (ckb), Kyrgyz (ky), Lao (lo), Latin (la), Latvian (lv), Lingala (ln), Lithuanian (lt), Luganda (lg), Luxembourgish (lb), Macedonian (mk), Maithili (mai), Malagasy (mg), Malay (ms), Malayalam (ml), Maltese (mt), Maori (mi), Marathi (mr), Meiteilon (Manipuri) (mni), Mizo (lus), Mongolian (mn), Myanmar (Burmese) (my), Nepali (ne), Norwegian (no), Odia (Oriya) (or), Oromo (om), Pashto (ps), Persian (fa), Polish (pl), Portuguese (pt), Punjabi (pa), Quechua (qu), Romanian (ro), Russian (ru), Samoan (sm), Sanskrit (sa), Scots Gaelic (gd), Sepedi (nso), Serbian (sr), Sesotho (st), Shona (sn), Sindhi (sd), Sinhala (si), Slovak (sk), Slovenian (sl), Somali (so), Spanish (es), Sundanese (su), Swahili (sw), Swedish (sv), Tajik (tg), Tamil (ta), Tatar (tt), Telugu (te), Thai (th), Tigrinya (ti), Tsonga (ts), Turkish (tr), Turkmen (tk), Twi (tw), Ukrainian (uk), Urdu (ur), Uyghur (ug), Uzbek (uz), Vietnamese (vi), Welsh (cy), Xhosa (xh), Yiddish (yi), Yoruba (yo), Zulu (zu)'
@@ -1016,9 +1046,9 @@ async def on_message(message):
     for word in bad_words:
         if word.lower() in message.content.lower():
             await message.delete()
-            await message.channel.send(f"🚩 {message.author.mention}, this message has been flagged by Milo Automod. Think this is a mistake? Contact the server Admin to review their filter.")
+            await message.channel.send(
+                f"🚩 {message.author.mention}, this message has been flagged by Milo Automod. Think this is a mistake? Contact the server Admin to review their filter.")
             return
-
 
     xp_earned = random.randint(10, 20)
 
@@ -1042,7 +1072,6 @@ async def on_message(message):
 
             await message.channel.send(response)
             return  # Stop here, don't process other commands after this
-
 
 
 @bot.command(name="daily", description="Get 500 gems every day.", category="Currency")
@@ -1088,8 +1117,6 @@ async def daily(ctx):
     )
 
 
-
-
 def load_data():
     try:
         with open("mod_data.json", "r") as f:
@@ -1097,19 +1124,14 @@ def load_data():
     except (FileNotFoundError, json.JSONDecodeError):
         return {}
 
+
 # Save data function
 def save_data(file, data):
     with open(file, "w") as f:
         json.dump(data, f, indent=4)
 
 
-
-
-
 # Load data from files
-
-
-
 
 
 # **Moderation Commands**
@@ -1118,7 +1140,6 @@ async def send_dm(user: discord.Member, message: str):
         await user.send(message)
     except discord.Forbidden:
         print(f"❌ Could not DM {user.name} (DMs disabled)")
-
 
 
 @bot.command(name="kick", description="Allows staff to kick a user.", category="Moderation")
@@ -1184,7 +1205,10 @@ async def report(ctx, member: discord.Member, *, reason="No reason provided"):
     except Exception as e:
         await ctx.respond(f"⚠️ Error: {e}")
 
-warnings={}
+
+warnings = {}
+
+
 # Warn Command
 @bot.command(name="warn", description="Allows staff to warn a user.", category="Moderation")
 @commands.has_role("Staff")
@@ -1198,6 +1222,8 @@ async def warn(ctx, member: discord.Member, *, reason):
     # Send DM to staff
     dm_message = f"{ctx.author.name} has warned {member} for: {reason} in {ctx.guild.name}"
     await send_dm_to_staff(ctx.guild, dm_message)
+
+
 # **Poll Command**
 
 @bot.command(name="poll", description="Creates a Poll.", category="Moderation")
@@ -1223,18 +1249,20 @@ async def butter(ctx):
     await ctx.respond("Oh No! The Butter Flies!")
     await ctx.respond("<:butterbutterfly:1338905847425663077>")
 
+
 # Help commands dictionary
 help_commands = {
     "Moderation": {
         "ban": {"emoji": "🔨", "description": "Bans a user from the server.", "usage": "/ban @user [reason]"},
         "kick": {"emoji": "👢", "description": "Kicks a user from the server.", "usage": "/kick @user [reason]"},
         "warn": {"emoji": "⚠️", "description": "Warns a user and logs it.", "usage": "/warn @user [reason]"},
-        "report": {"emoji": "📩", "description": "Reports a user to staff.", "usage": "/report @user [reason]"},},
+        "report": {"emoji": "📩", "description": "Reports a user to staff.", "usage": "/report @user [reason]"}, },
     "Utility": {
         "help": {"emoji": "❓", "description": "Shows this help menu.", "usage": "/help [command]"},
         "openpostcard": {"emoji": "🌍", "description": "Opens your postcards.", "usage": "/openpostcard"},
         "poll": {"emoji": "📊", "description": "Creates a poll with reactions.", "usage": "/poll <question> option1"},
-        "sendpostcard": {"emoji": "💌", "description": "Send a postcard to another user.", "usage": "/sendpostcard @user <message>"},
+        "sendpostcard": {"emoji": "💌", "description": "Send a postcard to another user.",
+                         "usage": "/sendpostcard @user <message>"},
         "coinflip": {"emoji": "🪙", "description": "Heads or Tails?", "usage": "/coinflip"},
         "riggedcoinflip": {"emoji": "🤞", "description": "Heads or Heads? Win every bet!", "usage": "/riggedcoinflip"},
         "choice": {"emoji": "🤔", "description": "Chooses between yes and no.", "usage": "/choice"},
@@ -1260,6 +1288,7 @@ help_commands = {
     }
 }
 
+
 # Slash command: Help
 @bot.slash_command(name="help", description="Shows help information.")
 async def help(ctx: discord.ApplicationContext, command: str = None):
@@ -1282,7 +1311,8 @@ async def help(ctx: discord.ApplicationContext, command: str = None):
             embed.add_field(name="Error", value="Command not found.", inline=False)
     else:
         for category, commands in help_commands.items():
-            category_field = "".join(f"{info['emoji']} **{cmd}**: {info['description']}\n" for cmd, info in commands.items())
+            category_field = "".join(
+                f"{info['emoji']} **{cmd}**: {info['description']}\n" for cmd, info in commands.items())
             embed.add_field(name=f"{category} Commands", value=category_field, inline=False)
 
     await ctx.respond(embed=embed)
@@ -1354,7 +1384,6 @@ async def meme(ctx, image_input: str, *, text: str):
         await ctx.respond(f"Error: {e}")
 
 
-
 # ✅ Command: Add a bad word
 @bot.command(name="addbadword", description="Add a word to the filter (Admins only)")
 @commands.has_role("Staff")
@@ -1371,6 +1400,7 @@ async def addbadword(ctx, *, word):
     update_setting(guild_id, "bad_words", bad_words)
     await ctx.respond(f"Added `{word}` to the bad word filter.")
 
+
 # ❌ Command: Remove a bad word
 @bot.command(name="removebadword", description="Remove a word from the filter (Admins only)")
 @commands.has_role("Staff")
@@ -1386,6 +1416,7 @@ async def removebadword(ctx, *, word):
     bad_words.remove(word.lower())
     update_setting(guild_id, "bad_words", bad_words)
     await ctx.respond(f"Removed `{word}` from the bad word filter.")
+
 
 # 📜 Command: List all filtered words
 @bot.command(name="listbadwords", description="List all filtered words for this server")
@@ -1429,6 +1460,7 @@ def is_valid_server_name(server_name):
 
 class ServerDropdown(Select):
     """Dropdown for selecting a server."""
+
     def __init__(self, servers, bot):
         options = []
         for name, data in servers.items():
@@ -1470,6 +1502,7 @@ class ServerDropdown(Select):
             await interaction.response.send_message(
                 "❌ There was an issue with the server's invite link.",
                 ephemeral=True)
+
 
 class VerifyDropdown(Select):
     """Dropdown for selecting servers to verify."""
@@ -1582,6 +1615,7 @@ ffmpeg_options = {
 
 ytdl = youtube_dl.YoutubeDL(ytdl_format_options)
 
+
 class YTDLSource(discord.PCMVolumeTransformer):
     def __init__(self, source, *, data, volume=0.5):
         super().__init__(source, volume)
@@ -1600,6 +1634,7 @@ class YTDLSource(discord.PCMVolumeTransformer):
         filename = data['url'] if stream else ytdl.prepare_filename(data)
         return cls(discord.FFmpegPCMAudio(filename, **ffmpeg_options), data=data)
 
+
 class ChannelDropdown(discord.ui.Select):
     def __init__(self, channels):
         options = [discord.SelectOption(label=channel.name, value=str(channel.id)) for channel in channels]
@@ -1609,11 +1644,13 @@ class ChannelDropdown(discord.ui.Select):
         self.view.channel_id = self.values[0]
         await interaction.response.send_message(f"Selected channel: {self.values[0]}", ephemeral=True)
 
+
 class DropdownView(discord.ui.View):
     def __init__(self, channels):
         super().__init__()
         self.add_item(ChannelDropdown(channels))
         self.channel_id = None
+
 
 class MusicControlView(discord.ui.View):
     def __init__(self, ctx):
@@ -1635,6 +1672,7 @@ class MusicControlView(discord.ui.View):
         await interaction.response.send_message("Music stopped", ephemeral=True)
         self.ctx.voice_client.stop()
         await self.ctx.voice_client.disconnect()
+
 
 @bot.command(name='play', description='Plays music in a selected voice channel')
 async def play(ctx, *, search: str):
@@ -1661,15 +1699,18 @@ async def play(ctx, *, search: str):
     else:
         player = await YTDLSource.from_url(data['webpage_url'], loop=loop, stream=True)
 
-    ctx.voice_client.play(player, after=lambda e: asyncio.run_coroutine_threadsafe(ensure_voice(ctx), loop) if e else None)
+    ctx.voice_client.play(player,
+                          after=lambda e: asyncio.run_coroutine_threadsafe(ensure_voice(ctx), loop) if e else None)
 
     await ctx.respond(f'Now playing: {player.title}', view=MusicControlView(ctx))
+
 
 @bot.command(name='stop', description='Stops the music and leaves the voice channel')
 async def stop(ctx):
     if ctx.voice_client:
         await ctx.voice_client.disconnect()
         await ctx.respond("Stopped the music.")
+
 
 @play.before_invoke
 @stop.before_invoke
@@ -1766,6 +1807,7 @@ class UseItemView(discord.ui.View):
         super().__init__()
         self.add_item(UseItemDropdown(user_id))
 
+
 @bot.command()
 @commands.has_role("Staff")
 async def additem(ctx, item_name: str, item_price: int, on_use: str, role: discord.Role = None):
@@ -1855,11 +1897,15 @@ class SellItemDropdown(discord.ui.Select):
             if role and role in interaction.user.roles:
                 await interaction.user.remove_roles(role)
 
-        await interaction.response.send_message(f"You sold **{item_name}** for **{sell_price} currency**!", ephemeral=True)
+        await interaction.response.send_message(f"You sold **{item_name}** for **{sell_price} currency**!",
+                                                ephemeral=True)
+
+
 class SellItemView(discord.ui.View):
     def __init__(self, user_id):
         super().__init__()
         self.add_item(SellItemDropdown(user_id))
+
 
 @bot.command()
 async def sellitem(ctx):
@@ -1872,8 +1918,86 @@ async def sellitem(ctx):
 
     view = SellItemView(ctx.author.id)
     await ctx.respond("Select an item to sell:", view=view)
-@bot.command()
+
+AGE_DATA_FILE = "age_data.json"
+# Load or create age data file
+def load_age_data():
+    if os.path.exists(AGE_DATA_FILE):
+        with open(AGE_DATA_FILE, 'r') as file:
+            return json.load(file)
+    return {}
+
+
+def save_age_data(data):
+    with open(AGE_DATA_FILE, 'w') as file:
+        json.dump(data, file)
+
+
+# Helper function to calculate age from birthdate
+def calculate_age(birthdate: str):
+    birthdate = datetime.datetime.strptime(birthdate, "%Y-%m-%d")
+    today = datetime.datetime.today()
+    age = today.year - birthdate.year - ((today.month, today.day) < (birthdate.month, birthdate.day))
+    return age
+
+
+# Age verification command using birthdate
+@bot.command(name="verifyage", description="Verify your age.")
+async def verifyage(ctx):
+    """Ask the user for their birthdate and verify it, ensuring security."""
+    # Verify if the user has already been verified
+    age_data = load_age_data()
+    if str(ctx.author.id) in age_data:
+        await ctx.respond("✅ You have already been verified!")
+        return
+
+    # Send an informative message explaining the verification
+    await ctx.respond(
+        "Please enter your birthdate in the format `YYYY-MM-DD` (e.g., `2000-05-15`) to verify your eligibility.")
+
+    def check(message):
+        return message.author == ctx.author and message.channel == ctx.channel
+
+    try:
+        # Wait for the user response
+        message = await bot.wait_for('message', check=check, timeout=60.0)
+
+        # Check if the birthdate input is valid
+        try:
+            birthdate = message.content.strip()
+            # Calculate the user's age based on the birthdate
+            age = calculate_age(birthdate)
+
+            if age < 18:
+                await ctx.send("❌ You must be at least 18 years old to access special content.")
+                return
+            else:
+                # Store the verified birthdate data securely
+                age_data = load_age_data()
+                age_data[str(ctx.author.id)] = birthdate  # Store the birthdate
+                save_age_data(age_data)
+                await ctx.send("✅ You have successfully been verified! You now have access to special commands.")
+        except ValueError:
+            await ctx.send("❌ Invalid birthdate format. Please enter a valid birthdate in the format `YYYY-MM-DD`.")
+    except asyncio.TimeoutError:
+        await ctx.send("❌ Verification timed out. Please try again by typing `!verify_age`.")
+
+
+@bot.command(name="slots", description="Play slots")
 async def slots(ctx, bet: int):
+    # Load the age data
+    age_data = load_age_data()
+
+    if str(ctx.author.id) not in age_data:
+        await ctx.respond("❌ You need to verify your age first. Use `/verifyage`.")
+        return
+        # Calculate the user's age using the stored birthdate
+        birthdate = age_data[str(ctx.author.id)]
+        age = calculate_age(birthdate)
+
+        if age <= 18:
+            await ctx.send("❌ You must be 18 or older to access this content.")
+
     user_id = str(ctx.author.id)
     guild_id = str(ctx.guild.id)
     balance = get_balance(guild_id, user_id)
@@ -1899,9 +2023,25 @@ async def slots(ctx, bet: int):
     # Update balance
     add_money(guild_id, user_id, winnings if winnings > 0 else -bet)
     # Show slot result
-    await ctx.respond(f"🎰 **Slots:**\n-# Milo does not support gambling. This is for enjoyment only in a virtual environment.\n {' | '.join(slot_result)}\n{result_text} (New balance: {get_balance(guild_id, user_id)})")
-@bot.command()
+    await ctx.respond(
+        f"🎰 **Slots:**\n-# Milo does not support gambling. This is for enjoyment only in a virtual environment.\n {' | '.join(slot_result)}\n{result_text} (New balance: {get_balance(guild_id, user_id)})")
+
+
+@bot.command(name="blackjack", description="Play blackjack")
 async def blackjack(ctx, bet: int):
+    # Load the age data
+    age_data = load_age_data()
+
+    if str(ctx.author.id) not in age_data:
+        await ctx.respond("❌ You need to verify your age first. Use `/verifyage`.")
+        return
+
+        # Calculate the user's age using the stored birthdate
+        birthdate = age_data[str(ctx.author.id)]
+        age = calculate_age(birthdate)
+
+        if age <= 18:
+            await ctx.send("❌ You must be 18 or older to access this content.")
     user_id = str(ctx.author.id)
     guild_id = str(ctx.guild.id)
     balance = get_balance(guild_id, user_id)
@@ -1943,29 +2083,31 @@ async def blackjack(ctx, bet: int):
     dealer_hand = [draw_card(), draw_card()]
     dealer_total = hand_value(dealer_hand)
 
-    await ctx.respond(f"# Blackjack\n-# Milo does not support gambling. This is for enjoyment only in a virtual environment.\n🃏 **Your hand:** {', '.join(player_hand)} (Total: {player_total})\n🤖 **Dealer's hand:** {dealer_hand[0]}, ❓")
+    await ctx.respond(
+        f"# Blackjack\n-# Milo does not support gambling. This is for enjoyment only in a virtual environment.\n🃏 **Your hand:** {', '.join(player_hand)} (Total: {player_total})\n🤖 **Dealer's hand:** {dealer_hand[0]}, ❓")
 
     if player_total == 21:
         add_money(guild_id, user_id, bet * 2)
-        await ctx.respond(f"🎉 **BLACKJACK!** You win 2x your bet! New balance: {get_balance(guild_id, user_id)}")
+        await ctx.send(f"🎉 **BLACKJACK!** You win 2x your bet! New balance: {get_balance(guild_id, user_id)}")
         return
 
     while player_total < 21:
-        await ctx.respond("Type `hit` to draw another card or `stand` to hold.")
+        await ctx.send("Type `hit` to draw another card or `stand` to hold.")
         try:
-            msg = await bot.wait_for("message", timeout=30, check=lambda m: m.author == ctx.author and m.content.lower() in ["hit", "stand"])
+            msg = await bot.wait_for("message", timeout=30,
+                                     check=lambda m: m.author == ctx.author and m.content.lower() in ["hit", "stand"])
         except:
-            await ctx.respond("Game timed out.")
+            await ctx.send("Game timed out.")
             return
 
         if msg.content.lower() == "hit":
             player_hand.append(draw_card())
             player_total = hand_value(player_hand)
-            await ctx.respond(f"🃏 **Your hand:** {', '.join(player_hand)} (Total: {player_total})")
+            await ctx.send(f"🃏 **Your hand:** {', '.join(player_hand)} (Total: {player_total})")
 
         if player_total > 21:
             add_money(guild_id, user_id, -bet)
-            await ctx.respond(f"💀 **BUST!** You lose! New balance: {get_balance(guild_id, user_id)}")
+            await ctx.send(f"💀 **BUST!** You lose! New balance: {get_balance(guild_id, user_id)}")
             return
 
         if msg.content.lower() == "stand":
@@ -1976,16 +2118,16 @@ async def blackjack(ctx, bet: int):
         dealer_hand.append(draw_card())
         dealer_total = hand_value(dealer_hand)
 
-    await ctx.respond(f"🤖 **Dealer's final hand:** {', '.join(dealer_hand)} (Total: {dealer_total})")
+    await ctx.send(f"🤖 **Dealer's final hand:** {', '.join(dealer_hand)} (Total: {dealer_total})")
 
     if dealer_total > 21 or player_total > dealer_total:
         add_money(guild_id, user_id, bet)
-        await ctx.respond(f"🎉 **You win!** New balance: {get_balance(guild_id, user_id)}")
+        await ctx.send(f"🎉 **You win!** New balance: {get_balance(guild_id, user_id)}")
     elif dealer_total > player_total:
         add_money(guild_id, user_id, -bet)
-        await ctx.respond(f"❌ **Dealer wins!** You lost. New balance: {get_balance(guild_id, user_id)}")
+        await ctx.send(f"❌ **Dealer wins!** You lost. New balance: {get_balance(guild_id, user_id)}")
     else:
-        await ctx.respond("🤝 **It's a tie!** Your bet is returned.")
+        await ctx.send("🤝 **It's a tie!** Your bet is returned.")
 
 
 class ScratchButton(discord.ui.Button):
@@ -2072,8 +2214,21 @@ class ScratchcardView(discord.ui.View):
             view=self)
 
 
-@bot.command()
+@bot.command(name="scratchcard", description="Play scratchcard")
 async def scratchcard(ctx, bet: int):
+    # Load the age data
+    age_data = load_age_data()
+
+    if str(ctx.author.id) not in age_data:
+        await ctx.respond("❌ You need to verify your age first. Use `/verifyage`.")
+        return
+
+        # Calculate the user's age using the stored birthdate
+        birthdate = age_data[str(ctx.author.id)]
+        age = calculate_age(birthdate)
+
+        if age <= 18:
+            await ctx.send("❌ You must be 18 or older to access this content.")
     """Play the scratch card game with a 5x5 grid and button selection."""
     user_id = str(ctx.author.id)
     guild_id = str(ctx.guild.id)
@@ -2097,11 +2252,16 @@ async def scratchcard(ctx, bet: int):
     view = ScratchcardView(ctx, bet, grid)
 
     # Send the game board with buttons and store the message
-    bot_message = await ctx.respond("🎟️ **Scratch Card - Choose 3 Spots!**\n-# Milo does not support gambling. This is for enjoyment only in a virtual environment.", view=view)
+    bot_message = await ctx.respond(
+        "🎟️ **Scratch Card - Choose 3 Spots!**\n-# Milo does not support gambling. This is for enjoyment only in a virtual environment.",
+        view=view)
 
     # Save the bot message inside the View
     view.bot_message = bot_message
+
+
 BIRTHDAYS_FILE = "birthdays.json"
+
 
 # Load birthdays from a file
 def load_birthdays():
@@ -2111,10 +2271,12 @@ def load_birthdays():
     except FileNotFoundError:
         return {}
 
+
 # Save birthdays to a file
 def save_birthdays(data):
     with open(BIRTHDAYS_FILE, "w") as f:
         json.dump(data, f, indent=4)
+
 
 @bot.command()
 async def setbirthday(ctx, date: str):
@@ -2134,6 +2296,7 @@ async def setbirthday(ctx, date: str):
 
     await ctx.respond(f"🎉 Birthday set! I'll wish you a happy birthday on **{date}**!")
 
+
 @bot.command()
 async def upcomingbirthdays(ctx):
     """Lists all upcoming birthdays"""
@@ -2149,6 +2312,7 @@ async def upcomingbirthdays(ctx):
 
     await ctx.respond(message)
 
+
 @tasks.loop(hours=24)
 async def check_birthdays():
     """Checks if it's anyone's birthday and sends a message"""
@@ -2161,6 +2325,8 @@ async def check_birthdays():
             channel = discord.utils.get(bot.get_all_channels(), name="general")  # Change if needed
             if channel:
                 await channel.send(f"🎂 Happy Birthday {user.mention}! 🎉🥳")
+
+
 @bot.slash_command(name='hello', description='Say hello!')
 async def hello(ctx):
     if isinstance(ctx.channel, discord.DMChannel):
@@ -2245,7 +2411,8 @@ async def quiz(ctx):
 
     # Wait for the reactions and check the answers
     def check(reaction, user):
-        return user != bot.user and str(reaction.emoji) in ["1️⃣", "2️⃣", "3️⃣", "4️⃣"] and reaction.message.id == message.id
+        return user != bot.user and str(reaction.emoji) in ["1️⃣", "2️⃣", "3️⃣",
+                                                            "4️⃣"] and reaction.message.id == message.id
 
     try:
         # Wait for a reaction
@@ -2338,17 +2505,17 @@ async def debug(ctx):
 
     await ctx.respond(embed=embed, ephemeral=True)
 
-bot.run(os.getenv('DISCORD_TOKEN'))
 
+bot.run(os.getenv('DISCORD_TOKEN'))
 
 #
 #
 #                                                                                                                                                                                                                                                                          dddddddd                                                                                                                          dddddddd
-#YYYYYYY       YYYYYYY                                     hhhhhhh                                                                                                                                                     hhhhhhh                                             d::::::d              tttt         hhhhhhh                                                                                        d::::::d
-#Y:::::Y       Y:::::Y                                     h:::::h                                                                                                                                                     h:::::h                                             d::::::d           ttt:::t         h:::::h                                                                                        d::::::d
-#Y:::::Y       Y:::::Y                                     h:::::h                                                                                                                                                     h:::::h                                             d::::::d           t:::::t         h:::::h                                                                                        d::::::d
-#Y::::::Y     Y::::::Y                                     h:::::h                                                                                                                                                     h:::::h                                             d:::::d            t:::::t         h:::::h                                                                                        d:::::d
-#YYY:::::Y   Y:::::YYYooooooooooo   uuuuuu    uuuuuu        h::::h hhhhh         aaaaaaaaaaaaavvvvvvv           vvvvvvv eeeeeeeeeeee         rrrrr   rrrrrrrrr       eeeeeeeeeeee    aaaaaaaaaaaaa      cccccccccccccccch::::h hhhhh           eeeeeeeeeeee        ddddddddd:::::d      ttttttt:::::ttttttt    h::::h hhhhh           eeeeeeeeeeee             eeeeeeeeeeee    nnnn  nnnnnnnn        ddddddddd:::::d
+# YYYYYYY       YYYYYYY                                     hhhhhhh                                                                                                                                                     hhhhhhh                                             d::::::d              tttt         hhhhhhh                                                                                        d::::::d
+# Y:::::Y       Y:::::Y                                     h:::::h                                                                                                                                                     h:::::h                                             d::::::d           ttt:::t         h:::::h                                                                                        d::::::d
+# Y:::::Y       Y:::::Y                                     h:::::h                                                                                                                                                     h:::::h                                             d::::::d           t:::::t         h:::::h                                                                                        d::::::d
+# Y::::::Y     Y::::::Y                                     h:::::h                                                                                                                                                     h:::::h                                             d:::::d            t:::::t         h:::::h                                                                                        d:::::d
+# YYY:::::Y   Y:::::YYYooooooooooo   uuuuuu    uuuuuu        h::::h hhhhh         aaaaaaaaaaaaavvvvvvv           vvvvvvv eeeeeeeeeeee         rrrrr   rrrrrrrrr       eeeeeeeeeeee    aaaaaaaaaaaaa      cccccccccccccccch::::h hhhhh           eeeeeeeeeeee        ddddddddd:::::d      ttttttt:::::ttttttt    h::::h hhhhh           eeeeeeeeeeee             eeeeeeeeeeee    nnnn  nnnnnnnn        ddddddddd:::::d
 #   Y:::::Y Y:::::Y oo:::::::::::oo u::::u    u::::u        h::::hh:::::hhh      a::::::::::::av:::::v         v:::::vee::::::::::::ee       r::::rrr:::::::::r    ee::::::::::::ee  a::::::::::::a   cc:::::::::::::::ch::::hh:::::hhh      ee::::::::::::ee    dd::::::::::::::d      t:::::::::::::::::t    h::::hh:::::hhh      ee::::::::::::ee         ee::::::::::::ee  n:::nn::::::::nn    dd::::::::::::::d
 #    Y:::::Y:::::Y o:::::::::::::::ou::::u    u::::u        h::::::::::::::hh    aaaaaaaaa:::::av:::::v       v:::::ve::::::eeeee:::::ee     r:::::::::::::::::r  e::::::eeeee:::::eeaaaaaaaaa:::::a c:::::::::::::::::ch::::::::::::::hh   e::::::eeeee:::::ee d::::::::::::::::d      t:::::::::::::::::t    h::::::::::::::hh   e::::::eeeee:::::ee      e::::::eeeee:::::een::::::::::::::nn  d::::::::::::::::d
 #     Y:::::::::Y  o:::::ooooo:::::ou::::u    u::::u        h:::::::hhh::::::h            a::::a v:::::v     v:::::ve::::::e     e:::::e     rr::::::rrrrr::::::re::::::e     e:::::e         a::::ac:::::::cccccc:::::ch:::::::hhh::::::h e::::::e     e:::::ed:::::::ddddd:::::d      tttttt:::::::tttttt    h:::::::hhh::::::h e::::::e     e:::::e     e::::::e     e:::::enn:::::::::::::::nd:::::::ddddd:::::d
@@ -2360,7 +2527,6 @@ bot.run(os.getenv('DISCORD_TOKEN'))
 #    YYYY:::::YYYY o:::::::::::::::o u:::::::::::::::u      h:::::h     h:::::ha:::::aaaa::::::a       v:::::v       e::::::::eeeeeeee        r:::::r             e::::::::eeeeeeeea:::::aaaa::::::a c:::::::::::::::::ch:::::h     h:::::h e::::::::eeeeeeee   d:::::::::::::::::d           tt::::::::::::::th:::::h     h:::::h e::::::::eeeeeeee        e::::::::eeeeeeee    n::::n    n::::n d:::::::::::::::::d
 #    Y:::::::::::Y  oo:::::::::::oo   uu::::::::uu:::u      h:::::h     h:::::h a::::::::::aa:::a       v:::v         ee:::::::::::::e        r:::::r              ee:::::::::::::e a::::::::::aa:::a cc:::::::::::::::ch:::::h     h:::::h  ee:::::::::::::e    d:::::::::ddd::::d             tt:::::::::::tth:::::h     h:::::h  ee:::::::::::::e         ee:::::::::::::e    n::::n    n::::n  d:::::::::ddd::::d
 #    YYYYYYYYYYYYY    ooooooooooo       uuuuuuuu  uuuu      hhhhhhh     hhhhhhh  aaaaaaaaaa  aaaa        vvv            eeeeeeeeeeeeee        rrrrrrr                eeeeeeeeeeeeee  aaaaaaaaaa  aaaa   cccccccccccccccchhhhhhh     hhhhhhh    eeeeeeeeeeeeee     ddddddddd   ddddd               ttttttttttt  hhhhhhh     hhhhhhh    eeeeeeeeeeeeee           eeeeeeeeeeeeee    nnnnnn    nnnnnn   ddddddddd   ddddd
-
 
 
 #        ##
@@ -2376,5 +2542,4 @@ bot.run(os.getenv('DISCORD_TOKEN'))
 #  ( )|-|-|-|====|-|-|-|( )
 #  ^^^^^^^^^^====^^^^^^^^^^^
 
-#House of the Bug Lord
-
+# House of the Bug Lord
