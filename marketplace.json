@@ -1,0 +1,11 @@
+{
+    "Hamburger": {
+        "price": 10,
+        "role_id": 1340766237826748486,
+        "on_use": "You ate the Hamburger. You are now very full. You are now fat. You dead."
+    },
+    "bolt": {
+        "price": 50,
+        "on_use": "die"
+    }
+}
