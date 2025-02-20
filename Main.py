@@ -1,6 +1,6 @@
 import discord
 import os
-import datetime
+from datetime import datetime, timedelta
 import ytdl
 from discord.ext import commands, tasks
 import requests
@@ -11,7 +11,7 @@ from openai import OpenAI
 from eight_ball_answers import eight_ball_answers
 from dotenv import load_dotenv
 import re
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
 from io import BytesIO
 from discord.ui import InputText, Select, View, Modal, Button
 from discord.utils import get
@@ -21,12 +21,19 @@ import ffmpeg
 import html
 import platform
 import psutil
+import io
+from discord import Option, SelectOption, ui
+from pytrends.request import TrendReq
+import time
+from collections import defaultdict
+
 
 load_dotenv()
 
 # Files for storage
 CACHE_FILE = "ai_cache.json"
 POSTCARD_FILE = "postcards.json"
+LOG_CHANNEL_NAME = "milo-mod-logs"
 
 # Set intents
 intents = discord.Intents.default()
@@ -39,6 +46,17 @@ bot = discord.Bot(intents=intents)
 
 SETTINGS_FILE = "Settings.json"
 
+async def on_error(ctx, error):
+    await ctx.send("An Error Occured.")
+
+async def get_log_channel(guild):
+    """Ensure there's a logging channel, or create one."""
+    for channel in guild.text_channels:
+        if channel.name == LOG_CHANNEL_NAME:
+            return channel
+
+    # Create channel if it doesn't exist
+    return await guild.create_text_channel(LOG_CHANNEL_NAME)
 
 # Load inventory from JSON
 # Load inventory from JSON
@@ -401,8 +419,9 @@ async def on_guild_join(guild):
                         "Here's a few things you can do to get started:\n\n"
                         "- **Set up custom commands** – Need a unique command? I can help with that!\n"
                         "- **Auto Roles** – I can assign roles to new members automatically.\n"
-                        "- **Moderation tools** – Let me help you keep the server clean and friendly.\n\n"
-                        "I'm excited to be part of your community, and I’m always here to assist! If you need help, just type `!help`, and I'll show you all the awesome things I can do! 🚀", )
+                        "- **Moderation tools** – Let me help you keep the server clean and friendly.\n"
+                        "To set me up, use /modsetup.\n\n"
+                        "I'm excited to be part of your community, and I’m always here to assist! If you need help, just type `/help`, and I'll show you all the awesome things I can do! 🚀", )
 
         # Add an image to the embed (can be a URL to an image)
         embed.set_image(url="https://example.com/your-image-url.jpg")  # Replace with your own image URL
@@ -413,6 +432,7 @@ async def on_guild_join(guild):
     else:
         print(f"No available channels to send a welcome message in '{guild.name}'!")
 
+anti_raid = {}
 
 @bot.event
 async def on_member_join(member):
@@ -464,7 +484,106 @@ async def on_member_join(member):
             print(f"❌ Auto Role '{auto_role_name}' not found in '{member.guild.name}'!")
 
 
-activity = discord.Game(name=";ai")
+    now = datetime.utcnow()
+    account_age = (now - member.created_at).days  # Days since account was created
+
+    # SUS CHECK: New account (less than 7 days old)
+    is_new_account = account_age < 7
+
+    # SUS CHECK: No profile picture
+    has_default_avatar = member.avatar is None
+
+    # SUS CHECK: Rapid joins (Anti-Raid)
+    if guild_id not in anti_raid:
+        anti_raid[guild_id] = {"enabled": True, "joins": []}
+
+    anti_raid[guild_id]["joins"].append(now)
+    anti_raid[guild_id]["joins"] = [j for j in anti_raid[guild_id]["joins"] if (now - j).total_seconds() < 10]
+
+    too_many_joins = len(anti_raid[guild_id]["joins"]) > 5  # More than 5 joins in 10 seconds
+
+    # If anything is sus, log and send alert
+    if is_new_account or has_default_avatar or too_many_joins:
+        channel = await get_log_channel(member.guild)
+        if channel:
+            sus_reasons = []
+            if is_new_account:
+                sus_reasons.append(f"📅 **New Account:** Created {account_age} days ago")
+            if has_default_avatar:
+                sus_reasons.append("🖼 **No Profile Picture**")
+            if too_many_joins:
+                sus_reasons.append("🚨 **Anti-Raid Triggered: Too many joins!**")
+
+            sus_message = f"⚠️ **Suspicious Join Alert!**\n👤 **User:** {member.mention} ({member})\n" + "\n".join(sus_reasons)
+            await channel.send(sus_message)
+
+        # Kick if anti-raid is triggered
+        if too_many_joins:
+            await member.kick(reason="🚨 Anti-Raid Protection: Too many users joining!")
+            general_channel = discord.utils.get(member.guild.text_channels, name="general")
+            if general_channel:
+                await general_channel.send(f"🚨 **Anti-Raid Triggered!** Kicking new joiners to protect the server.")
+
+    # Auto Role Assignment
+    auto_role_name = guild_settings.get("Auto Role")
+    if auto_role_name:
+        role = discord.utils.get(member.guild.roles, name=auto_role_name)
+        if role and member.guild.me.guild_permissions.manage_roles and role.position < member.guild.me.top_role.position:
+            await member.add_roles(role)
+
+
+@bot.event
+async def on_message_delete(message):
+    """Log deleted messages, but only if they contained links."""
+    if message.author.bot:
+        return
+
+    # SUS CHECK: Deleted message contained a link
+    if "http" in message.content or "www." in message.content:
+        channel = await get_log_channel(message.guild)
+        if channel:
+            await channel.send(f"🚨 **Suspicious Message Deletion!**\n🔗 **User:** {message.author}\n💬 **Content:** {message.content}\n📍 **Channel:** {message.channel.mention}")
+
+
+@bot.event
+async def on_message_edit(before, after):
+    """Log edited messages, but only if they change significantly (avoid minor typos)."""
+    if before.author.bot or before.content == after.content:
+        return
+
+    # SUS CHECK: Major edit (more than 5 words changed)
+    before_words = before.content.split()
+    after_words = after.content.split()
+    changed_word_count = sum(1 for w1, w2 in zip(before_words, after_words) if w1 != w2)
+
+    if changed_word_count > 5 or "http" in after.content or "www." in after.content:  # Flags major changes or link insertions
+        channel = await get_log_channel(before.guild)
+        if channel:
+            await channel.send(f"⚠️ **Suspicious Edit Detected!**\n✏ **User:** {before.author}\n📝 **Before:** {before.content}\n📝 **After:** {after.content}\n📍 **Channel:** {before.channel.mention}")
+
+
+@bot.event
+async def on_member_remove(member):
+    """Log user departures."""
+    channel = await get_log_channel(member.guild)
+    if channel:
+        await channel.send(f"❌ **{member}** left the server.")
+activity = discord.Game(name="/ai")
+
+@bot.command()
+async def antiraid(ctx, on_or_off: str):
+    """Enable or disable anti-raid"""
+    guild_id = str(ctx.guild.id)
+
+    if on_or_off.lower() == "on":
+        anti_raid[guild_id] = {"joins": 0, "time": datetime.utcnow()}
+        await ctx.respond("🛡 Anti-Raid Protection **Enabled**!")
+    elif on_or_off.lower() == "off":
+        if guild_id in anti_raid:
+            del anti_raid[guild_id]
+        await ctx.respond("🚨 Anti-Raid Protection **Disabled**!")
+    else:
+        await ctx.respond("❌ Invalid command! Use `/antiraid on` or `/antiraid off`.")
 
 
 @bot.event
@@ -537,9 +656,11 @@ async def on_raw_reaction_add(payload):
 
 
 @bot.event
-async def on_command_error(ctx, error):
+async def on_application_command_error(ctx, error: commands.CommandError):
     if isinstance(error, commands.MissingRole):
         await ctx.respond("🚫 You need the 'Staff' role to use this command.")
+    elif isinstance(error, commands.NotOwner):
+        await ctx.respond("❌ Only the bot owner can use this command!", ephemeral=True)
 
     elif isinstance(error, commands.MissingPermissions):
         await ctx.respond("⛔ You don't have permission to use this command.")
@@ -747,10 +868,19 @@ async def viewsettings(ctx):
     await ctx.respond(f"🔧 **Current Settings:**\n{formatted_settings}")
 
 
-@bot.command(name="modsetup", description="Sets up the server for Milo.", category="Moderation")
+@bot.command(name="modsetup", description="Sets up the server for Milo.")
 async def modsetup(ctx):
+    if not discord.utils.get(ctx.guild.roles, name="Staff"):
+        staff_role = await ctx.guild.create_role(name="Staff")
     guild = ctx.guild
     staff_role = discord.utils.get(guild.roles, name="Staff")
+    if ctx.author.guild_permissions.administrator:
+        await ctx.respond("✅ Setting up...")
+        await ctx.author.add_roles(staff_role)
+    else:
+        await ctx.respond("❌ You do not have administrator privileges.")
+        return
+
 
     if staff_role in ctx.author.roles or ctx.author == guild.owner or ctx.author == bot.user:
         overwrites = {
@@ -769,7 +899,7 @@ async def modsetup(ctx):
             await ctx.respond("✅ Created 'milo-mod-logs' channel with restricted access!")
     else:
         await ctx.respond(
-            "❌ You do not have permission to create this channel. To add staff, use the add staff command.")
+            "❌ You do not have permission to setup. To add staff, use the add staff command.")
 
 
 @bot.command(name="riggedcoinflip", description="Win every bet.", category="Utilities")
@@ -1018,20 +1148,155 @@ async def gemboard(ctx):
     await ctx.respond(leaderboard_message)
 
 
-@bot.command(name="level", description="View your level.", category="Leveling")
-async def level(ctx):
-    data = read_user_data()
+def xp_needed_for_next_level(level):
+    """Returns XP required for the next level (adjust as needed)."""
+    return level * 100  # Example formula
+
+
+def generate_profile_card(username, level, xp, server_id, avatar_url, user_data):
+    """Generates a profile card with a darkened background for better readability."""
+
+    # Load the background image
+    server_background_url = user_data.get(server_id, {}).get("background_url")
+    if not server_background_url:
+        print("No background set for this server.")
+        return None  # Prevent crashing if background isn't set
+
+    try:
+        background = Image.open(requests.get(server_background_url, stream=True).raw).convert("RGBA")
+        background = background.resize((800, 250))  # Fixed size for consistency
+    except Exception as e:
+        print(f"Error loading background: {e}")
+        return None
+
+    # Darken the background by adding a semi-transparent black overlay
+    dark_overlay = Image.new("RGBA", background.size, (0, 0, 0, 120))  # Adjust opacity if needed
+    background = Image.alpha_composite(background, dark_overlay)
+
+    # Load avatar
+    try:
+        avatar = Image.open(requests.get(avatar_url, stream=True).raw).convert("RGBA")
+        avatar_size = 120
+        avatar = avatar.resize((avatar_size, avatar_size), Image.Resampling.LANCZOS)
+    except Exception as e:
+        print(f"Error loading avatar: {e}")
+        return None
+
+    # Create a circular mask for the avatar
+    mask = Image.new("L", (avatar_size, avatar_size), 0)
+    draw_mask = ImageDraw.Draw(mask)
+    draw_mask.ellipse((0, 0, avatar_size, avatar_size), fill=255)
+    avatar = Image.composite(avatar, Image.new("RGBA", avatar.size, (0, 0, 0, 0)), mask)
+
+    # Load fonts
+    try:
+        font = ImageFont.truetype("arial.ttf", 40)
+        level_font = ImageFont.truetype("arial.ttf", 30)
+        progress_font = ImageFont.truetype("arial.ttf", 22)
+    except IOError:
+        font = ImageFont.load_default()
+        level_font = ImageFont.load_default()
+        progress_font = ImageFont.load_default()
+
+    # Create a drawing context
+    draw = ImageDraw.Draw(background)
+
+    # Positioning
+    avatar_x = 30
+    avatar_y = (background.height - avatar_size) // 2
+    text_x = avatar_x + avatar_size + 25
+    text_y = avatar_y
+
+    # XP Progress Bar Setup
+    bar_x = text_x
+    bar_y = background.height - 40
+    bar_width = 500
+    bar_height = 15
+
+    next_level_xp = xp_needed_for_next_level(level)
+    progress = xp / next_level_xp if next_level_xp > 0 else 0
+    filled_width = int(bar_width * progress)
+
+    # Draw username and level
+    draw.text((text_x, text_y), username, font=font, fill="white")
+    draw.text((text_x, text_y + 45), f"Level: {level}", font=level_font, fill="white")
+    draw.text((text_x, text_y + 75), f"XP: {xp} / {next_level_xp}", font=progress_font, fill="white")
+
+    # Draw XP progress bar
+    draw.rectangle([bar_x, bar_y, bar_x + bar_width, bar_y + bar_height], fill=(255, 255, 255, 100), outline="white")
+    draw.rectangle([bar_x, bar_y, bar_x + filled_width, bar_y + bar_height], fill=(255, 255, 255, 200))
+
+    # Paste avatar onto background
+    background.paste(avatar, (avatar_x, avatar_y), avatar)
+
+    # Save image to a byte stream
+    img_byte_arr = io.BytesIO()
+    background.save(img_byte_arr, format="PNG")
+    img_byte_arr.seek(0)
+
+    return img_byte_arr
+
+
+
+@bot.slash_command(name="level", description="View your level.")
+async def level(ctx: discord.ApplicationContext):
+    """Displays the user's level, XP, and the server-wide background."""
+
+    user_data = read_user_data()
     user_id = str(ctx.author.id)
-    if user_id not in data:
+    guild_id = str(ctx.guild.id)  # Get the server ID as a string
+
+    # Check if user has level data
+    if user_id not in user_data:
         await ctx.respond(f"{ctx.author.name}, you haven't earned any XP yet!")
         return
 
-    user_data = data[user_id]
-    await ctx.respond(
-        f"{ctx.author.name}, you are level {user_data['level']} with {user_data['xp']} XP."
-    )
+    # Fetch server-wide background
+    background_url = user_data.get(guild_id, {}).get("background_url")
+
+    # If no background is set, tell the user
+    if not background_url:
+        await ctx.respond(f"{ctx.author.name}, your server has not set a custom background yet!")
+        return
+
+    # Get user stats
+    user_stats = user_data[user_id]
+    level = user_stats.get("level", 1)
+    xp = user_stats.get("xp", 0)
+
+    # Get avatar URL
+    avatar_url = ctx.author.display_avatar.url
+
+    # Generate profile card
+    profile_card = generate_profile_card(ctx.author.name, level, xp, guild_id, avatar_url, user_data)
+
+    if profile_card is None:
+        await ctx.respond("❌ Error generating your profile card. Please try again later.")
+        return
+
+    # Send the image as a file
+    file = discord.File(profile_card, filename="profile.png")
+    await ctx.respond(file=file)
 
 
+@bot.slash_command(name="setbg", description="Set a custom background for all server members (Staff only). Size: 800x250")
+@commands.has_role("Staff")  # Restrict to users with the "Staff" role
+async def setbg(ctx: discord.ApplicationContext, image: discord.Attachment):
+    """Allows staff members to set a background that applies to everyone in the server."""
+
+    guild_id = str(ctx.guild.id)  # Store background per server
+    user_data = read_user_data()
+
+    if guild_id not in user_data:
+        user_data[guild_id] = {"background_url": None}
+
+    # Save the new background for the server
+    user_data[guild_id]["background_url"] = image.url
+    save_user_data(user_data)
+
+    await ctx.respond(f"✅ The custom background has been set for **everyone** in the server!", ephemeral=True)
+
+user_messages = defaultdict(list)
 @bot.event
 async def on_message(message):
     if message.author.bot:
@@ -1042,14 +1307,6 @@ async def on_message(message):
     guild_id = str(message.guild.id)
     settings = load_settings()
     bad_words = settings.get(guild_id, {}).get("bad_words", [])
-
-    for word in bad_words:
-        if word.lower() in message.content.lower():
-            await message.delete()
-            await message.channel.send(
-                f"🚩 {message.author.mention}, this message has been flagged by Milo Automod. Think this is a mistake? Contact the server Admin to review their filter.")
-            return
-
     xp_earned = random.randint(10, 20)
 
     await update_xp(message, str(message.author.id), xp_earned)
@@ -1226,22 +1483,59 @@ async def warn(ctx, member: discord.Member, *, reason):
 
 # **Poll Command**
 
-@bot.command(name="poll", description="Creates a Poll.", category="Moderation")
+@bot.slash_command(name="poll", description="Creates a poll with up to 10 options.")
 @commands.has_role("Staff")
-async def poll(ctx, question, *options):
+async def poll(ctx: discord.ApplicationContext, question: str, single_choice: bool, option1: str, option2: str,
+               option3: str = None, option4: str = None, option5: str = None, option6: str = None,
+               option7: str = None, option8: str = None, option9: str = None, option10: str = None):
+    options = [option for option in
+               [option1, option2, option3, option4, option5, option6, option7, option8, option9, option10] if option]
+
     if len(options) < 2:
-        await ctx.respond("Please provide at least two options for the poll.")
+        await ctx.respond("Please provide at least two options for the poll.", ephemeral=True)
         return
-    if len(options) > 10:
-        await ctx.respond("Please provide no more than 10 options for the poll.")
-        return
-    embed = discord.Embed(title=question,
-                          description="\n".join([f"{index + 1}. {option}" for index, option in enumerate(options)]),
-                          color=discord.Color.blue())
+
+    embed = discord.Embed(
+        title=question,
+        description="\n".join([f"{index + 1}. {option}" for index, option in enumerate(options)]),
+        color=discord.Color.blue()
+    )
+    embed.set_footer(text="🔘 Single Choice" if single_choice else "✅ Multiple Choice")
+
+    await ctx.defer()
+
     poll_message = await ctx.respond(embed=embed)
 
+    # Define reaction emojis
+    reactions = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+
     for i in range(len(options)):
-        await poll_message.add_reaction(f"{chr(127462 + i)}")  # Adds reactions A, B, C...
+        await poll_message.add_reaction(reactions[i])
+
+    if single_choice:
+        # Dictionary to track user votes
+        user_votes = {}
+
+        def check(reaction, user):
+            return reaction.message.id == poll_message.id and str(reaction.emoji) in reactions and not user.bot
+
+        while True:
+            try:
+                reaction, user = await bot.wait_for("reaction_add", check=check)
+
+                # Remove the user's previous reaction if they voted before
+                if user in user_votes:
+                    try:
+                        await poll_message.remove_reaction(user_votes[user], user)
+                    except discord.errors.Forbidden:
+                        print("Bot doesn't have permission to remove reactions!")
+
+                # Update the user’s vote
+                user_votes[user] = reaction.emoji
+
+            except Exception as e:
+                print(f"Error: {e}")
+                break
 
 
 @bot.command(name="butter", description="Summons the power of butter.", category="Fun")
@@ -1935,8 +2229,8 @@ def save_age_data(data):
 
 # Helper function to calculate age from birthdate
 def calculate_age(birthdate: str):
-    birthdate = datetime.datetime.strptime(birthdate, "%Y-%m-%d")
-    today = datetime.datetime.today()
+    birthdate = datetime.strptime(birthdate, "%Y-%m-%d")
+    today = datetime.today()
     age = today.year - birthdate.year - ((today.month, today.day) < (birthdate.month, birthdate.day))
     return age
 
@@ -2286,7 +2580,7 @@ async def setbirthday(ctx, date: str):
 
     # Validate date format
     try:
-        datetime.datetime.strptime(date, "%m-%d")
+        datetime.strptime(date, "%m-%d")
     except ValueError:
         await ctx.respond("Invalid date format! Please use `MM-DD` (e.g., `12-25` for Dec 25).")
         return
@@ -2316,7 +2610,7 @@ async def upcomingbirthdays(ctx):
 @tasks.loop(hours=24)
 async def check_birthdays():
     """Checks if it's anyone's birthday and sends a message"""
-    today = datetime.datetime.now().strftime("%m-%d")
+    today = datetime.now().strftime("%m-%d")
     birthdays = load_birthdays()
 
     for user_id, date in birthdays.items():
@@ -2487,7 +2781,7 @@ async def debug(ctx):
     memory_total = round(memory_info.total / (1024 * 1024 * 1024), 1)
 
     # Embed creation
-    embed = discord.Embed(title="Debug", color=discord.Color.blue())
+    embed = discord.Embed(title="Debug", color=discord.Color(0xBE38F3))
     embed.add_field(name="Ping", value=f"{latency}ms", inline=False)
     embed.add_field(name="Integration Type", value="User", inline=False)
     embed.add_field(name="Context", value="Guild", inline=False)
@@ -2501,9 +2795,412 @@ async def debug(ctx):
     embed.add_field(name="Memory", value=f"{memory_used} MB Used / {memory_total} GB", inline=False)
 
     # Add a footer with the current date and time
-    embed.set_footer(text=f"Timestamp: {datetime.datetime.now(datetime.UTC).strftime('%Y-%m-%d %H:%M:%S')} UTC")
+    embed.set_footer(text=f"Timestamp: {datetime.now(datetime.UTC).strftime('%Y-%m-%d %H:%M:%S')} UTC")
 
     await ctx.respond(embed=embed, ephemeral=True)
+
+
+CUSTOM_COMMANDS_FILE = "custom_commands.json"
+
+# Load existing custom commands
+if os.path.exists(CUSTOM_COMMANDS_FILE):
+    with open(CUSTOM_COMMANDS_FILE, "r") as file:
+        custom_commands = json.load(file)
+else:
+    custom_commands = {}
+
+
+def save_commands():
+    """Saves the custom commands to a JSON file."""
+    with open(CUSTOM_COMMANDS_FILE, "w") as file:
+        json.dump(custom_commands, file, indent=4)
+
+
+# Slash command to create a new custom command
+@bot.slash_command(name="addcommand", description="Add a custom command.")
+@commands.has_permissions(administrator=True)
+async def add_command(ctx: discord.ApplicationContext, name: str, response: str):
+    """Allows an admin to create a custom command."""
+    name = name.lower()
+
+    if name in custom_commands:
+        await ctx.respond(f"❌ The command `{name}` already exists!", ephemeral=True)
+        return
+
+    custom_commands[name] = response
+    save_commands()
+
+    await ctx.respond(f"✅ Custom command `{name}` has been added!")
+
+
+# Slash command to delete a custom command
+@bot.slash_command(name="removecommand", description="Remove a custom command.")
+@commands.has_permissions(administrator=True)
+async def remove_command(ctx: discord.ApplicationContext, name: str):
+    """Allows an admin to delete a custom command."""
+    name = name.lower()
+
+    if name not in custom_commands:
+        await ctx.respond(f"❌ The command `{name}` does not exist!", ephemeral=True)
+        return
+
+    del custom_commands[name]
+    save_commands()
+
+    await ctx.respond(f"✅ Custom command `{name}` has been removed!")
+
+
+# Slash command to list all custom commands
+@bot.slash_command(name="listcommands", description="List all custom commands.")
+async def list_commands(ctx: discord.ApplicationContext):
+    """Lists all the available custom commands."""
+    if not custom_commands:
+        await ctx.respond("📭 No custom commands have been added yet!", ephemeral=True)
+        return
+
+    command_list = "\n".join([f"🔹 `{cmd}`" for cmd in custom_commands.keys()])
+    embed = discord.Embed(title="📜 Custom Commands", description=command_list, color=discord.Color.blue())
+
+    await ctx.respond(embed=embed)
+
+
+# Slash command to execute a custom command
+@bot.slash_command(name="custom", description="Use a custom command.")
+async def custom(ctx: discord.ApplicationContext, name: str):
+    """Allows users to execute a custom command."""
+    name = name.lower()
+
+    if name not in custom_commands:
+        await ctx.respond(f"❌ The command `{name}` does not exist!", ephemeral=True)
+        return
+
+    await ctx.respond(custom_commands[name])
+
+# --- ROCK PAPER SCISSORS COMMAND --- #
+class RPSDropdown(ui.Select):
+    def __init__(self, ctx):
+        self.ctx = ctx
+        options = [
+            SelectOption(label="Rock", emoji="🪨", value="rock"),
+            SelectOption(label="Paper", emoji="📄", value="paper"),
+            SelectOption(label="Scissors", emoji="✂️", value="scissors")
+        ]
+        super().__init__(placeholder="Choose Rock, Paper, or Scissors", options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        user_choice = self.values[0]
+        bot_choice = random.choice(["rock", "paper", "scissors"])
+        result = determine_winner(user_choice, bot_choice)
+
+        await interaction.response.send_message(
+            f"You chose {user_choice}! The bot chose {bot_choice}! **{result}**", ephemeral=True
+        )
+
+
+class RPSView(ui.View):
+    def __init__(self, ctx):
+        super().__init__()
+        self.add_item(RPSDropdown(ctx))
+
+
+@bot.slash_command(name="rps", description="Play Rock-Paper-Scissors against the bot.")
+async def rps(ctx: discord.ApplicationContext):
+    await ctx.respond("Choose Rock, Paper, or Scissors!", view=RPSView(ctx), ephemeral=True)
+
+
+def determine_winner(user_choice, bot_choice):
+    if user_choice == bot_choice:
+        return "It's a tie!"
+    elif (user_choice == "rock" and bot_choice == "scissors") or \
+            (user_choice == "scissors" and bot_choice == "paper") or \
+            (user_choice == "paper" and bot_choice == "rock"):
+        return "You win! 🎉"
+    else:
+        return "You lose! 😢"
+
+@bot.command(name="rob", description="Robs a user.")
+async def rob(ctx, user: discord.User):
+    await ctx.defer()
+
+    if user == ctx.author:
+        await ctx.respond("❌ You can't rob yourself!")
+        return
+
+    if random.randint(1, 10) == 1:  # 10% chance of getting caught
+        remove_money(ctx.guild.id, ctx.author.id, 200)
+        await ctx.respond(f"👮 You were caught stealing! You were fined 200💎!")
+        return
+
+    if remove_money(ctx.guild.id, user.id, 200):
+        add_money(ctx.guild.id, ctx.author.id, 200)
+        await ctx.respond(f"💰 Success! You stole 200💎 from {user.mention}!")
+    else:
+        await ctx.respond(f"❌ Failed to steal. {user.mention} doesn't have enough 💎.")
+
+
+
+
+# Higher or Lower Game using Google Trends API
+@bot.command(name="higherlower", description="Play Higher Lower.")
+# Higher or Lower Game with random numbers
+async def higherlower(ctx):
+    # Start with a random number between 1 and 1000
+    current_number = random.randint(1, 1000)
+    await ctx.respond(f"Starting with: {current_number}")
+    score = 0
+
+    while True:
+        # Generate the next random number between 1 and 1000
+        next_number = random.randint(1, 1000)
+
+        # Ask the user to guess if the next number is higher or lower
+        await ctx.send(f"Does the next number have a higher or lower value than {current_number}?")
+
+        def check(msg):
+            return msg.author == ctx.author and msg.channel == ctx.channel and msg.content.lower() in ["higher",
+                                                                                                       "lower"]
+
+        try:
+            # Wait for user input (with timeout)
+            response = await ctx.bot.wait_for("message", check=check, timeout=30.0)
+
+            # Check if the user's guess was correct
+            if (response.content.lower() == "higher" and next_number > current_number) or \
+                    (response.content.lower() == "lower" and next_number < current_number):
+                score += 1
+                await ctx.send(f"Correct! My number was {next_number}! Current score: {score}")
+
+                # Update current number for next round
+                current_number = next_number
+            else:
+                await ctx.send(f"Wrong! The next number was {next_number}. You scored {score} points.")
+                break  # End the game if wrong guess
+        except asyncio.TimeoutError:
+            await ctx.send("You took too long to respond. Game over!")
+            break  # End the game if no response
+
+
+# Load To-Do Lists per Guild
+def load_todo():
+    try:
+        with open("todo.json", "r") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {}
+
+# Save To-Do Lists per Guild
+def save_todo(data):
+    with open("todo.json", "w") as f:
+        json.dump(data, f, indent=4)
+
+@bot.command()
+async def addtodo(ctx, *, task):
+    """Add a task to your server's To-Do List"""
+    guild_id = str(ctx.guild.id)
+    todo_data = load_todo()
+
+    if guild_id not in todo_data:
+        todo_data[guild_id] = []
+
+    todo_data[guild_id].append(task)
+    save_todo(todo_data)
+
+    await ctx.respond(f"✅ Task added: `{task}`")
+
+@bot.command()
+async def todo(ctx):
+    """View all tasks in your server's To-Do List"""
+    guild_id = str(ctx.guild.id)
+    todo_data = load_todo()
+
+    tasks = todo_data.get(guild_id, [])
+    if not tasks:
+        await ctx.respond("📌 No tasks in the to-do list.")
+    else:
+        task_list = "\n".join([f"📍 {i+1}. {task}" for i, task in enumerate(tasks)])
+        await ctx.respond(f"**📋 To-Do List:**\n{task_list}")
+
+@bot.command()
+async def removetodo(ctx, index: int):
+    """Remove a task from your server's To-Do List"""
+    guild_id = str(ctx.guild.id)
+    todo_data = load_todo()
+
+    if guild_id in todo_data and 0 < index <= len(todo_data[guild_id]):
+        removed_task = todo_data[guild_id].pop(index - 1)
+        save_todo(todo_data)
+        await ctx.respond(f"❌ Removed: `{removed_task}`")
+    else:
+        await ctx.respond("❗ Invalid task number.")
+
+reminders = {}
+
+@bot.command()
+async def remindme(ctx, time_remind: int, *, task):
+    """Set a reminder (time in minutes)"""
+    guild_id = str(ctx.guild.id)
+    user_id = str(ctx.author.id)
+
+    if guild_id not in reminders:
+        reminders[guild_id] = {}
+
+    if user_id not in reminders[guild_id]:
+        reminders[guild_id][user_id] = []
+
+    remind_time = datetime.utcnow() + timedelta(minutes=time_remind)
+    reminders[guild_id][user_id].append({"task": task, "time": remind_time})
+
+    await ctx.respond(f"⏳ Reminder set for `{task}` in `{time_remind}` minutes.")
+
+    await asyncio.sleep(time_remind * 60)  # Wait for the time duration
+
+    await ctx.send(f"⏰ {ctx.author.mention} Reminder: `{task}`")
+
+
+class TicTacToe(View):
+    def __init__(self):
+        super().__init__()
+        self.board = [" "] * 9  # Empty board
+        self.game_over = False  # Track if the game is over
+        self.player_turn = True  # True = Player, False = Bot
+
+        # Create buttons for the 3x3 grid
+        for i in range(9):
+            self.add_item(TicTacToeButton(i, self))
+
+    def check_winner(self):
+        """Check if there's a winner or a tie."""
+        wins = [(0, 1, 2), (3, 4, 5), (6, 7, 8), (0, 3, 6), (1, 4, 7), (2, 5, 8), (0, 4, 8), (2, 4, 6)]
+
+        for a, b, c in wins:
+            if self.board[a] == self.board[b] == self.board[c] and self.board[a] != " ":
+                return self.board[a]  # "X" or "O" wins
+
+        if " " not in self.board:
+            return "Tie"  # No spaces left, it's a tie
+
+        return None  # No winner yet
+
+    async def bot_move(self, interaction):
+        """Bot makes a smart move based on strategy instead of random selection."""
+        if self.game_over:
+            return  # Game is already over
+
+        def check_win(board, symbol):
+            """Check if there's a winning move for the bot ('O') or player ('X')."""
+            for a, b, c in [(0, 1, 2), (3, 4, 5), (6, 7, 8), (0, 3, 6), (1, 4, 7), (2, 5, 8), (0, 4, 8), (2, 4, 6)]:
+                if board[a] == board[b] == symbol and board[c] == " ":
+                    return c
+                if board[a] == board[c] == symbol and board[b] == " ":
+                    return b
+                if board[b] == board[c] == symbol and board[a] == " ":
+                    return a
+            return None
+
+        empty_positions = [i for i in range(9) if self.board[i] == " "]
+
+        # 1️⃣ Win if possible
+        win_move = check_win(self.board, "O")
+        if win_move is not None:
+            bot_choice = win_move
+        # 2️⃣ Block player if they're about to win
+        elif (block_move := check_win(self.board, "X")) is not None:
+            bot_choice = block_move
+        # 3️⃣ Take the center if available
+        elif 4 in empty_positions:
+            bot_choice = 4
+        # 4️⃣ Take a corner (best strategic move)
+        elif any(pos in empty_positions for pos in [0, 2, 6, 8]):
+            bot_choice = random.choice([pos for pos in [0, 2, 6, 8] if pos in empty_positions])
+        # 5️⃣ Take a side if nothing else is available
+        else:
+            bot_choice = random.choice(empty_positions)
+
+        self.board[bot_choice] = "O"
+
+        for button in self.children:
+            if button.index == bot_choice:
+                button.label = "O"
+                button.style = discord.ButtonStyle.danger  # Red for bot
+                button.disabled = True
+                break
+
+        winner = self.check_winner()
+        if winner:
+            await self.end_game(interaction, winner)
+        else:
+            self.player_turn = True  # Switch turn back to player
+            await interaction.message.edit(view=self)  # ✅ Correctly update UI!
+    async def end_game(self, interaction, winner):
+        """End the game and disable all buttons."""
+        self.game_over = True
+        for button in self.children:
+            button.disabled = True
+
+        message = "🤝 **It's a tie!**" if winner == "Tie" else f"🎉 **{winner} wins the game!**"
+        await interaction.message.edit(content=message, view=self)  # ✅ Final game message!
+
+
+class TicTacToeButton(Button):
+    def __init__(self, index, game):
+        super().__init__(label="-", style=discord.ButtonStyle.secondary, row=index // 3)
+        self.index = index
+        self.game = game  # ✅ Store reference to the game (TicTacToe View)
+
+    async def callback(self, interaction: discord.Interaction):
+        """Handles button clicks for the player's move."""
+        if self.game.game_over:
+            await interaction.response.send_message("⚠ The game is already over!", ephemeral=True)
+            return
+
+        if not self.game.player_turn:
+            await interaction.response.send_message("⚠ It's not your turn!", ephemeral=True)
+            return
+
+        self.label = "X"
+        self.style = discord.ButtonStyle.success  # Green for player
+        self.disabled = True
+        self.game.board[self.index] = "X"
+        self.game.player_turn = False  # Switch turn to bot
+
+        winner = self.game.check_winner()
+        if winner:
+            await self.game.end_game(interaction, winner)
+        else:
+            await interaction.response.defer()  # ✅ Prevents timeout issue!
+            await interaction.message.edit(view=self.game)  # ✅ Fix: Update `self.game` instead of `self`
+            await self.game.bot_move(interaction)  # ✅ Let the bot play next!
+
+@bot.command(name="purge", description="Delete messages. Usage: !purge <number> [word]")
+@commands.has_permissions(manage_messages=True)
+async def purge(ctx, number: int, word: str = None):
+    #Deletes messages in the channel, searching until the required amount is found if filtering by a word.
+    if number <= 0:
+        return await ctx.send("❌ **Please enter a valid number of messages to delete!**")
+
+    deleted_messages = []
+
+    if word:
+        # Keep searching messages until we delete the requested amount
+        async for message in ctx.channel.history(limit=500):  # Searches up to 500 messages
+            if word.lower() in message.content.lower():
+                await message.delete()
+                deleted_messages.append(message)
+
+            if len(deleted_messages) >= number:
+                break
+    else:
+        # Delete messages normally
+        deleted_messages = await ctx.channel.purge(limit=number)
+
+    await ctx.respond(f"✅ **Deleted {len(deleted_messages)} messages.**", delete_after=3)
+
+
+
+@bot.command()
+async def ttt(ctx):
+    """Start a Tic-Tac-Toe game against the bot."""
+    await ctx.respond("🎮 **Tic-Tac-Toe Game!** You are 'X'. The bot is 'O'.", view=TicTacToe())
 
 
 bot.run(os.getenv('DISCORD_TOKEN'))
